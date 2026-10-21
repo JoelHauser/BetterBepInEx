@@ -26,6 +26,9 @@ namespace BetterBepInEx
             RowFilter.List, RowFilter.Keybind, RowFilter.Text, RowFilter.Other,
         };
 
+        private static readonly GUIContent HiddenTag = new GUIContent("HIDDEN",
+            "Its mod hides this setting from the menu. Change it only if you know what it does.");
+
         private static readonly string[] FilterNames = { "All", "Changed", "Toggles", "Numbers", "Lists", "Keybinds", "Text", "Other" };
 
         private RowFilter _filter = RowFilter.All;
@@ -71,20 +74,22 @@ namespace BetterBepInEx
             }
         }
 
-        private bool Passes(Row row)
+        private bool Passes(Row row) => Passes(row, _filter);
+
+        private bool Passes(Row row, RowFilter filter)
         {
-            if (row.IsAdvanced && !ShowAdvanced)
+            if (row.IsHidden && !ShowHidden || row.IsAdvanced && !ShowAdvanced)
             {
                 return false;
             }
-            switch (_filter)
+            switch (filter)
             {
                 case RowFilter.All:
                     return true;
                 case RowFilter.Changed:
                     return row.IsChanged;
                 default:
-                    return (int)row.Category == (int)_filter - 2;
+                    return (int)row.Category == (int)filter - 2;
             }
         }
 
@@ -95,15 +100,15 @@ namespace BetterBepInEx
         private void DrawFilterBar(List<Row> rows)
         {
             Array.Clear(_filterCounts, 0, _filterCounts.Length);
-            bool showAdvanced = ShowAdvanced;
-            int advancedCount = 0;
+            int hiddenCount = 0;
             foreach (Row row in rows)
             {
-                if (row.IsAdvanced)
+                // Advanced rows are always listed in search results, so only hidden ones count there.
+                if (row.IsHidden || row.IsAdvanced && _query.IsEmpty)
                 {
-                    advancedCount++;
+                    hiddenCount++;
                 }
-                if (row.IsAdvanced && !showAdvanced)
+                if (!Passes(row, RowFilter.All))
                 {
                     continue;
                 }
@@ -131,19 +136,17 @@ namespace BetterBepInEx
                 }
             }
             GUILayout.FlexibleSpace();
-            // Only settings their mod marks as advanced are hidden, and most mods mark none, so
-            // the toggle is only offered where it would change something, with how much. Search
-            // always shows advanced settings, so it is not offered there either.
-            if (advancedCount > 0 && _query.IsEmpty)
+            // Offered only where it would change something, with how much: most mods hide or
+            // mark advanced nothing at all.
+            if (hiddenCount > 0)
             {
-                bool advanced = _plugin.ShowAdvanced.Value;
-                GUIContent label = advanced
-                    ? CountedLabel("Hide advanced  ", advancedCount, 20)
-                    : CountedLabel("Show advanced  ", advancedCount, 21);
-                if (GUILayout.Button(label, advanced ? _skin.ChipOn : _skin.Chip, GUILayout.ExpandWidth(false)))
+                bool on = ShowHidden;
+                GUIContent label = on
+                    ? CountedLabel("Hide hidden  ", hiddenCount, 20)
+                    : CountedLabel("Show hidden  ", hiddenCount, 21);
+                if (GUILayout.Button(label, on ? _skin.ChipOn : _skin.Chip, GUILayout.ExpandWidth(false)))
                 {
-                    _plugin.ShowAdvanced.Value = !advanced;
-                    _model.MarkCountsDirty();
+                    ToggleHidden();
                 }
             }
             GUILayout.EndHorizontal();
@@ -196,9 +199,9 @@ namespace BetterBepInEx
             }
             if (drawn == 0)
             {
-                EmptyNote(page.Rows.Count == 0 ? "This mod has no settings."
+                EmptyNote(page.Rows.Count == 0 ? "This mod has no settings to change. It is listed so you can see everything that is loaded."
                     : _filter != RowFilter.All ? "Nothing here matches the filter."
-                    : "Every setting this mod has is marked advanced. Click \"Show advanced\" above to see them.");
+                    : "This mod's author hides all of its settings or marks them advanced. Click \"Show hidden\" above to see them.");
             }
             EndList(page.Guid);
         }
@@ -432,7 +435,7 @@ namespace BetterBepInEx
         private void BeginList(string key)
         {
             int width = Mathf.RoundToInt(_rowWidth);
-            int flags = (_plugin.ShowDescriptions.Value ? 1 : 0) | (ShowAdvanced ? 2 : 0);
+            int flags = (_plugin.ShowDescriptions.Value ? 1 : 0) | (ShowAdvanced ? 2 : 0) | (ShowHidden ? 4 : 0);
             if (!ReferenceEquals(key, _listKey) || _filter != _listFilter || !ReferenceEquals(_query.Text, _listQuery)
                 || width != _listWidth || flags != _listFlags)
             {
@@ -647,9 +650,13 @@ namespace BetterBepInEx
             bool advanced = row.IsAdvanced;
             bool readOnly = row.IsReadOnly;
             bool conflict = _model.Conflicts.TryGetValue(row, out List<Row> others);
-            if (advanced || readOnly)
+            if (advanced || readOnly || row.IsHidden)
             {
                 GUILayout.BeginHorizontal();
+                if (row.IsHidden)
+                {
+                    GUILayout.Label(HiddenTag, _skin.Tag, GUILayout.ExpandWidth(false));
+                }
                 if (advanced)
                 {
                     GUILayout.Label(Cached("ADVANCED"), _skin.Tag, GUILayout.ExpandWidth(false));

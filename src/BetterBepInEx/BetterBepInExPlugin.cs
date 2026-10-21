@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -30,7 +30,7 @@ namespace BetterBepInEx
         public const string PluginName = "BetterBepInEx";
 
         /// <summary>Must match the csproj's Version. Two places, and they have to agree.</summary>
-        public const string PluginVersion = "0.3.0";
+        public const string PluginVersion = "0.3.1";
 
         private const string GameFontHint = "Bender";
 
@@ -43,7 +43,7 @@ namespace BetterBepInEx
         internal ConfigEntry<bool> ClickOffToPlay;
         internal ConfigEntry<float> BackgroundOpacity;
         internal ConfigEntry<bool> ShowDescriptions;
-        internal ConfigEntry<bool> ShowAdvanced;
+        internal ConfigEntry<bool> ShowHidden;
         internal ConfigEntry<float> MenuScale;
         internal ConfigEntry<bool> ScaleWithScreen;
         internal ConfigEntry<bool> UseGameFont;
@@ -89,7 +89,7 @@ namespace BetterBepInEx
                 "Darken the screen behind the menu.");
             ShowDescriptions = Config.Bind("General", "Show descriptions under settings", true,
                 "Print each setting's description under its name. Off shows it when you hover the name instead.");
-            ShowAdvanced = Config.Bind("General", "Show advanced settings", false,
+            ShowHidden = Config.Bind("General", "Show hidden and advanced", false,
                 "Show settings their mod marks as advanced. Search always finds them.");
 
             MenuScale = Config.Bind("Look", "Menu scale", 1f, new ConfigDescription(
@@ -233,7 +233,8 @@ namespace BetterBepInEx
         {
             System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();
             long signature = _stock.Signature();
-            List<SettingEntryBase> settings = _stock.CollectSettings(Logger);
+            List<BaseUnityPlugin> withoutSettings = new List<BaseUnityPlugin>();
+            List<SettingEntryBase> settings = _stock.CollectSettings(Logger, withoutSettings);
             // The stock menu hides its own settings, F12 included. Show its hotkey on this page,
             // where someone looking for how to change F12 will look.
             List<SettingEntryBase> extra = new List<SettingEntryBase>();
@@ -241,7 +242,7 @@ namespace BetterBepInEx
             {
                 extra.Add(_stock.Wrap(_stock.Hotkey, this));
             }
-            _model.Build(settings, extra);
+            _model.Build(settings, extra, withoutSettings);
             _builtSignature = signature;
             _menu.OnModelRebuilt();
             Logger.LogInfo("Indexed " + _model.AllRows.Count + " settings from " + _model.Pages.Count

@@ -79,6 +79,13 @@ namespace BetterBepInEx
         public string Haystack;
         public bool IsChanged;
         public bool IsAdvanced;
+
+        /// <summary>
+        /// Hidden by its author: Browsable = false on the entry, or [Browsable(false)] on the
+        /// plugin. Shown only with "Show hidden", tagged, and left out of counts and conflicts
+        /// otherwise.
+        /// </summary>
+        public bool IsHidden;
         public bool IsReadOnly;
         public bool CanReset;
         public object[] Options;
@@ -149,6 +156,12 @@ namespace BetterBepInEx
         public readonly List<Row> Rows = new List<Row>();
         public int ChangedCount;
         public int VisibleCount;
+
+        /// <summary>A loaded plugin with no config entries at all; listed only with "Show hidden".</summary>
+        public bool HasNoSettings;
+
+        /// <summary>Every row is hidden, or there are none: the page is in the sidebar only with "Show hidden".</summary>
+        public bool IsHidden;
         public GUIContent SidebarLabel;
 
         /// <summary>Lower-cased names for the sidebar's filter box, made on first use.</summary>
@@ -199,7 +212,10 @@ namespace BetterBepInEx
             _stock = stock;
         }
 
-        public void Build(IEnumerable<SettingEntryBase> settings, IEnumerable<SettingEntryBase> extra)
+        /// <summary>Pages that only "Show hidden" lists.</summary>
+        public int HiddenPageCount;
+
+        public void Build(IEnumerable<SettingEntryBase> settings, IEnumerable<SettingEntryBase> extra, IEnumerable<BaseUnityPlugin> withoutSettings)
         {
             Pages.Clear();
             PagesByGuid.Clear();
@@ -212,12 +228,14 @@ namespace BetterBepInEx
 
             foreach (SettingEntryBase setting in settings.Concat(extra))
             {
-                if (setting == null || setting.PluginInfo == null || setting.Browsable == false)
+                if (setting == null || setting.PluginInfo == null)
                 {
                     continue;
                 }
-                Page page = PageFor(setting);
+                Page page = PageFor(setting.PluginInfo, setting.PluginInstance);
                 Row row = MakeRow(setting, page);
+                row.IsHidden = setting.Browsable == false
+                               || setting.PluginInstance != null && StockManager.IsHidden(setting.PluginInstance.GetType());
                 page.Rows.Add(row);
                 AllRows.Add(row);
                 if (row.Entry != null)
@@ -252,14 +270,31 @@ namespace BetterBepInEx
                 }
             }
 
+            foreach (BaseUnityPlugin plugin in withoutSettings)
+            {
+                if (plugin != null && plugin.Info != null && plugin.Info.Metadata != null)
+                {
+                    PageFor(plugin.Info.Metadata, plugin).HasNoSettings = true;
+                }
+            }
+
+            HiddenPageCount = 0;
+            foreach (Page page in Pages)
+            {
+                page.IsHidden = page.HasNoSettings || page.Rows.All(r => r.IsHidden);
+                if (page.IsHidden)
+                {
+                    HiddenPageCount++;
+                }
+            }
+
             Pages.Sort((a, b) => string.CompareOrdinal(a.SortKey, b.SortKey));
             _countsDirty = true;
             _keybindsDirty = true;
         }
 
-        private Page PageFor(SettingEntryBase setting)
+        private Page PageFor(BepInPlugin info, BaseUnityPlugin plugin)
         {
-            BepInPlugin info = setting.PluginInfo;
             if (PagesByGuid.TryGetValue(info.GUID, out Page page))
             {
                 return page;
@@ -274,8 +309,8 @@ namespace BetterBepInEx
                 SortKey = DisplayNames.SortKey(display),
                 Version = info.Version == null ? string.Empty : info.Version.ToString(),
                 Author = DisplayNames.AuthorFromGuid(info.GUID) ?? DisplayNames.AuthorFromName(info.Name),
-                Plugin = setting.PluginInstance,
-                Website = WebsiteOf(setting.PluginInstance),
+                Plugin = plugin,
+                Website = WebsiteOf(plugin),
             };
             page.Title = new GUIContent(display);
             page.Subtitle = new GUIContent(
@@ -545,8 +580,21 @@ namespace BetterBepInEx
             }
         }
 
-        public void RefreshIfDirty(bool showAdvanced)
+        private bool _countedHidden;
+
+        /// <summary>
+        /// Recounts what changed and rebuilds the keybind list when something did. Hidden rows
+        /// count only while they are shown, so a mod's private window position does not turn up
+        /// as a "changed setting" or a key conflict nobody can see.
+        /// </summary>
+        public void RefreshIfDirty(bool showHidden)
         {
+            if (showHidden != _countedHidden)
+            {
+                _countedHidden = showHidden;
+                _countsDirty = true;
+                _keybindsDirty = true;
+            }
             if (_countsDirty)
             {
                 _countsDirty = false;
@@ -558,12 +606,16 @@ namespace BetterBepInEx
                     page.VisibleCount = 0;
                     foreach (Row row in page.Rows)
                     {
+                        if (row.IsHidden && !showHidden)
+                        {
+                            continue;
+                        }
                         if (row.IsChanged)
                         {
                             page.ChangedCount++;
                             ChangedRows.Add(row);
                         }
-                        if (showAdvanced || !row.IsAdvanced)
+                        if (showHidden || !row.IsAdvanced)
                         {
                             page.VisibleCount++;
                         }
@@ -574,13 +626,13 @@ namespace BetterBepInEx
             if (_keybindsDirty)
             {
                 _keybindsDirty = false;
-                RebuildKeybinds();
+                RebuildKeybinds(showHidden);
             }
         }
 
         public void MarkCountsDirty() => _countsDirty = true;
 
-        private void RebuildKeybinds()
+        private void RebuildKeybinds(bool showHidden)
         {
             KeybindRows.Clear();
             Conflicts.Clear();
@@ -589,6 +641,10 @@ namespace BetterBepInEx
             List<HotkeyConflicts.Binding<Row>> bindings = new List<HotkeyConflicts.Binding<Row>>();
             foreach (Row row in AllRows)
             {
+                if (row.IsHidden && !showHidden)
+                {
+                    continue;
+                }
                 if (row.Kind != RowKind.Shortcut && row.Kind != RowKind.KeyCode
                     && row.Setting.SettingType != typeof(KeyboardShortcut) && row.Setting.SettingType != typeof(KeyCode))
                 {

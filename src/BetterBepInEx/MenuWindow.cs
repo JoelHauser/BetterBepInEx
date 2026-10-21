@@ -97,7 +97,18 @@ namespace BetterBepInEx
 
         private float U(float v) => _skin.U(v);
 
-        private bool ShowAdvanced => _plugin.ShowAdvanced.Value || !_query.IsEmpty;
+        /// <summary>Hidden settings and mods (and advanced settings) are listed.</summary>
+        private bool ShowHidden => _plugin.ShowHidden.Value;
+
+        /// <summary>Advanced settings are listed: with Show hidden, and always in search results.</summary>
+        private bool ShowAdvanced => _plugin.ShowHidden.Value || !_query.IsEmpty;
+
+        private void ToggleHidden()
+        {
+            _plugin.ShowHidden.Value = !_plugin.ShowHidden.Value;
+            _model.MarkCountsDirty();
+            ResetVirtualization();
+        }
 
         public void OnModelRebuilt()
         {
@@ -168,7 +179,7 @@ namespace BetterBepInEx
             GUI.skin = _skin.GuiSkin;
 
             EnsureRect();
-            _model.RefreshIfDirty(ShowAdvanced);
+            _model.RefreshIfDirty(ShowHidden);
             if (_searchDirty)
             {
                 RebuildSearch();
@@ -518,13 +529,26 @@ namespace BetterBepInEx
             }
 
             GUILayout.BeginHorizontal();
-            GUILayout.Label(CountedLabel("MODS  ", _model.Pages.Count, 1), _skin.SidebarHeader);
+            int listed = ShowHidden ? _model.Pages.Count : _model.Pages.Count - _model.HiddenPageCount;
+            GUILayout.Label(CountedLabel("MODS  ", listed, 1), _skin.SidebarHeader);
             GUILayout.FlexibleSpace();
             if (GUILayout.Button(_modsChangedOnly ? "Changed only" : "All", _skin.SidebarToggle, GUILayout.ExpandWidth(false)))
             {
                 _modsChangedOnly = !_modsChangedOnly;
             }
             GUILayout.EndHorizontal();
+            if (_model.HiddenPageCount > 0)
+            {
+                // Mods with no settings, or whose author hid all of them. The stock menu never
+                // listed these at all.
+                GUIContent toggle = ShowHidden
+                    ? CountedLabel("Hide hidden mods  ", _model.HiddenPageCount, 5)
+                    : CountedLabel("Show hidden mods  ", _model.HiddenPageCount, 6);
+                if (GUILayout.Button(toggle, _skin.SidebarHiddenToggle, GUILayout.ExpandWidth(true)))
+                {
+                    ToggleHidden();
+                }
+            }
 
             int shown = 0;
             foreach (Page page in _model.Pages)
@@ -545,7 +569,7 @@ namespace BetterBepInEx
 
         private bool SidebarShows(Page page, SearchQuery filter)
         {
-            if (_modsChangedOnly && page.ChangedCount == 0)
+            if (_modsChangedOnly && page.ChangedCount == 0 || page.IsHidden && !ShowHidden)
             {
                 return false;
             }
@@ -556,7 +580,7 @@ namespace BetterBepInEx
         private void SidebarPage(Page page)
         {
             bool selected = _query.IsEmpty && _page == page.Guid;
-            if (SidebarButton(page.SidebarLabel, selected, page.ChangedCount, _skin.BadgeMuted))
+            if (SidebarButton(page.SidebarLabel, selected, page.ChangedCount, _skin.BadgeMuted, page.IsHidden))
             {
                 Select(page.Guid);
             }
@@ -565,13 +589,13 @@ namespace BetterBepInEx
         private void SidebarItem(string key, string label, int count, GUIStyle badge)
         {
             bool selected = _query.IsEmpty && _page == key;
-            if (SidebarButton(Cached(label), selected, count, badge))
+            if (SidebarButton(Cached(label), selected, count, badge, false))
             {
                 Select(key);
             }
         }
 
-        private bool SidebarButton(GUIContent label, bool selected, int count, GUIStyle badgeStyle)
+        private bool SidebarButton(GUIContent label, bool selected, int count, GUIStyle badgeStyle, bool dimmed)
         {
             Rect r = GUILayoutUtility.GetRect(label, _skin.SidebarItem, GUILayout.ExpandWidth(true));
             if (selected && Event.current.type == EventType.Repaint)
@@ -598,7 +622,8 @@ namespace BetterBepInEx
                 badgeStyle.Draw(new Rect(r.xMax - size.x - U(8), r.y + (r.height - size.y) / 2f, size.x, size.y), badge, false, false, false, false);
             }
             Rect text = new Rect(r.x, r.y, r.width - badgeWidth, r.height);
-            (selected ? _skin.SidebarTextActive : _skin.SidebarText).Draw(text, label, r.Contains(Event.current.mousePosition), false, false, false);
+            GUIStyle textStyle = selected ? _skin.SidebarTextActive : dimmed ? _skin.SidebarTextHidden : _skin.SidebarText;
+            textStyle.Draw(text, label, r.Contains(Event.current.mousePosition), false, false, false);
             return clicked;
         }
 

@@ -139,13 +139,19 @@ namespace BetterBepInEx
 
         /// <summary>
         /// Collects every setting the way the stock SettingSearcher does (BepInEx's core config as
-        /// advanced settings, then each loaded plugin's config, honouring [Browsable(false)] on the
-        /// plugin class and Browsable = false on the entry), but without its two slow parts: a
+        /// advanced settings, then each loaded plugin's config), but without its two slow parts: a
         /// FindObjectsOfType scan of the scene for plugins the chainloader did not load, and the
         /// per-plugin DLL version-info read for the website, which the stock menu repeats on
         /// every open. Plugins outside the chainloader are therefore not listed.
+        ///
+        /// Unlike the stock search it keeps what authors hide ([Browsable(false)] on the plugin,
+        /// Browsable = false on an entry); the model marks those rows hidden and the menu shows
+        /// them only with "Show hidden". Plugins with no settings at all go in
+        /// <paramref name="withoutSettings"/>, so that view can list every loaded mod. The stock
+        /// Configuration Manager itself is left out: its F12 key is already on this mod's page,
+        /// and its other settings do nothing while this window replaces its own.
         /// </summary>
-        public List<SettingEntryBase> CollectSettings(ManualLogSource log)
+        public List<SettingEntryBase> CollectSettings(ManualLogSource log, List<BaseUnityPlugin> withoutSettings)
         {
             List<SettingEntryBase> results = new List<SettingEntryBase>();
             if (_coreConfig != null)
@@ -162,19 +168,20 @@ namespace BetterBepInEx
             foreach (PluginInfo info in Chainloader.PluginInfos.Values)
             {
                 BaseUnityPlugin plugin = info.Instance;
-                if (plugin == null || IsHidden(plugin.GetType()))
+                if (plugin == null || plugin == Instance)
                 {
                     continue;
                 }
                 try
                 {
+                    if (plugin.Config.Count == 0)
+                    {
+                        withoutSettings.Add(plugin);
+                        continue;
+                    }
                     foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> kv in plugin.Config)
                     {
-                        SettingEntryBase s = Wrap(kv.Value, plugin);
-                        if (s.Browsable != false)
-                        {
-                            results.Add(s);
-                        }
+                        results.Add(Wrap(kv.Value, plugin));
                     }
                 }
                 catch (Exception e)
@@ -185,7 +192,7 @@ namespace BetterBepInEx
             return results;
         }
 
-        private static bool IsHidden(Type type)
+        internal static bool IsHidden(Type type)
         {
             foreach (object attribute in type.GetCustomAttributes(typeof(System.ComponentModel.BrowsableAttribute), false))
             {

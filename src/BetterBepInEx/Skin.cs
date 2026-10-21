@@ -46,7 +46,7 @@ namespace BetterBepInEx
         public GUIStyle Window, Sidebar, Card, TitleBar;
         public GUIStyle Title, PageTitle, PageSubtitle, SectionHeader, GroupHeader, GroupHeaderDanger;
         public GUIStyle Label, Muted, Small, Description, DangerText, Badge, BadgeDanger, BadgeMuted, Tag;
-        public GUIStyle SidebarItem, SidebarText, SidebarTextActive, SidebarHeader, SidebarSelected, SidebarToggle, SidebarFilter;
+        public GUIStyle SidebarItem, SidebarText, SidebarTextActive, SidebarTextHidden, SidebarHeader, SidebarSelected, SidebarToggle, SidebarFilter, SidebarHiddenToggle;
         public GUIStyle CardTop, CardMid, CardBottom, CardSingle, RowHover, ShadowStyle, KeyHint, KeyHintActive;
         public GUIStyle Button, ButtonAccent, ButtonDanger, Ghost, GhostDanger, IconButton, LinkButton, Dropdown;
         public GUIStyle TextField, SearchField, NumberField, KeyField, KeyFieldActive, Keycap, KeyPlus;
@@ -163,6 +163,8 @@ namespace BetterBepInEx
             SidebarText.clipping = TextClipping.Clip;
             SidebarText.hover.textColor = TextColor;
             SidebarTextActive = new GUIStyle(SidebarText) { fontStyle = FontStyle.Bold };
+            SidebarTextHidden = new GUIStyle(SidebarText) { fontStyle = FontStyle.Italic };
+            SidebarTextHidden.normal.textColor = MutedColor;
             SidebarTextActive.normal.textColor = TextColor;
             SidebarHeader = TextStyle(10, MutedColor, FontStyle.Bold);
             SidebarHeader.padding = Offset(U(14), 0, U(16), U(6));
@@ -170,6 +172,8 @@ namespace BetterBepInEx
             SidebarToggle = TextStyle(10, Accent, FontStyle.Bold);
             SidebarToggle.padding = Offset(U(6), U(6), U(16), U(6));
             SidebarToggle.hover.textColor = Color.white;
+            SidebarHiddenToggle = new GUIStyle(SidebarToggle) { alignment = TextAnchor.MiddleLeft };
+            SidebarHiddenToggle.padding = Offset(U(14), U(6), U(2), U(8));
 
             // ---------------------------------------------------------------- buttons
             Button = Make(TextStyle(13, TextColor), Rounded(ButtonBg, 6, null), 6);
