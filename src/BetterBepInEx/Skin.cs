@@ -3,6 +3,40 @@ using UnityEngine;
 
 namespace BetterBepInEx
 {
+    /// <summary>The menu's colour themes. The descriptions are what the settings dropdown shows.</summary>
+    public enum MenuTheme
+    {
+        [System.ComponentModel.Description("Dark")]
+        Dark,
+
+        [System.ComponentModel.Description("Black (OLED)")]
+        Black,
+
+        [System.ComponentModel.Description("Grey")]
+        Grey,
+
+        [System.ComponentModel.Description("High contrast")]
+        HighContrast,
+
+        [System.ComponentModel.Description("Tan")]
+        Tan,
+    }
+
+    /// <summary>Everything the skin is built from besides scale and font; a change rebuilds it.</summary>
+    internal struct SkinOptions
+    {
+        public MenuTheme Theme;
+        public Color Accent;
+        public float TextScale;
+        public bool Compact;
+
+        public bool SameAs(SkinOptions other)
+        {
+            return Theme == other.Theme && Accent == other.Accent && Mathf.Approximately(TextScale, other.TextScale)
+                   && Compact == other.Compact;
+        }
+    }
+
     /// <summary>
     /// The menu's IMGUI skin. Built in code: rounded-rect, circle, shadow and icon textures drawn
     /// pixel by pixel, rounded ones nine-sliced, on a dark palette with EFT's tan as the accent.
@@ -16,28 +50,17 @@ namespace BetterBepInEx
     /// </summary>
     internal sealed class Skin
     {
-        public static readonly Color WindowBg = Hex(0x16181C);
-        public static readonly Color SidebarBg = Hex(0x121417);
-        public static readonly Color CardBg = Hex(0x1D2025);
-        public static readonly Color CardBorder = Hex(0x272B31);
-        public static readonly Color Divider = Hex(0x262A30);
-        public static readonly Color Hover = Hex(0x252930);
-        public static readonly Color Selected = Hex(0x262A31);
-        public static readonly Color InputBg = Hex(0x111316);
-        public static readonly Color InputBorder = Hex(0x2C3138);
-        public static readonly Color ButtonBg = Hex(0x262A30);
-        public static readonly Color ButtonHover = Hex(0x30353C);
-        public static readonly Color ButtonActive = Hex(0x3A4048);
-        public static readonly Color TextColor = Hex(0xECE8DF);
-        public static readonly Color SoftText = Hex(0xC2C5C9);
-        public static readonly Color MutedColor = Hex(0x8E949B);
-        public static readonly Color Accent = Hex(0xD6B76E);
-        public static readonly Color AccentText = Hex(0x17140C);
-        public static readonly Color Danger = Hex(0xE06C60);
-        public static readonly Color DangerBg = Hex(0x3A1F1C);
-        public static readonly Color TrackOffColor = Hex(0x3A3F46);
-        public static readonly Color KeycapBg = Hex(0x2B3037);
-        public static readonly Color KeycapEdge = Hex(0x3B424B);
+        // The palette. Static so drawing code anywhere can use it; set by ApplyPalette at the
+        // start of every Build, from the theme and accent colour chosen in the settings.
+        public static Color WindowBg, WindowOutline, CardBg, CardBorder, Divider, Hover, Selected, HoverOverlay;
+        public static Color InputBg, InputBorder, InputHoverBorder, FieldHoverBg, SearchBg;
+        public static Color ButtonBg, ButtonHover, ButtonActive;
+        public static Color TextColor, SoftText, MutedColor;
+        public static Color Accent, AccentText, AccentSoft, Danger, DangerBg;
+        public static Color TrackOffColor, KeycapBg, KeycapEdge, KeycapLip, TagBg, BadgeMutedBg, ScrollThumb;
+        public static Color PopupBg, PopupBorder, TooltipBg;
+
+        public SkinOptions Options { get; private set; }
 
         public float Scale { get; private set; }
         public Font Font => _font;
@@ -49,7 +72,7 @@ namespace BetterBepInEx
         public GUIStyle SidebarItem, SidebarText, SidebarTextActive, SidebarTextHidden, SidebarHeader, SidebarSelected, SidebarToggle, SidebarFilter, SidebarHiddenToggle;
         public GUIStyle CardTop, CardMid, CardBottom, CardSingle, RowHover, ShadowStyle, KeyHint, KeyHintActive;
         public GUIStyle Button, ButtonAccent, ButtonDanger, Ghost, GhostDanger, IconButton, LinkButton, Dropdown;
-        public GUIStyle TextField, SearchField, NumberField, KeyField, KeyFieldActive, Keycap, KeyPlus;
+        public GUIStyle RenameField, TextField, SearchField, NumberField, KeyField, KeyFieldActive, Keycap, KeyPlus;
         public GUIStyle Chip, ChipOn, TrackOn, TrackOff;
         public GUIStyle RowStyle, Popup, PopupItem, PopupItemActive, Status, Tooltip;
         public GUIStyle Slider, SliderThumb, SliderTrack, SliderFill;
@@ -64,11 +87,20 @@ namespace BetterBepInEx
 
         public float U(float v) => Mathf.Round(v * Scale);
 
-        public void Build(float scale, Font font)
+        /// <summary>
+        /// Sizes that hold a line of text (field heights, list rows) grow with the text size as
+        /// well as the menu scale, or bigger text would be clipped.
+        /// </summary>
+        public float T(float v) => Mathf.Round(v * Scale * Options.TextScale);
+
+        public void Build(float scale, Font font, SkinOptions options)
         {
             Destroy();
             Scale = scale;
             _font = font;
+            Options = options;
+            ApplyPalette(options.Theme, options.Accent);
+            bool compact = options.Compact;
 
             GuiSkin = Object.Instantiate(GUI.skin);
             // EFT unloads unused assets on scene changes; this keeps the skin through a raid load.
@@ -89,7 +121,7 @@ namespace BetterBepInEx
             Texture2D selected = Rounded(Selected, 6, null);
 
             // ---------------------------------------------------------------- surfaces
-            Window = Make(null, Rounded(WindowBg, 10, Hex(0x2E333A)), 10);
+            Window = Make(null, Rounded(WindowBg, 10, WindowOutline), 10);
             Window.padding = Offset(0);
             Sidebar = new GUIStyle { padding = Offset(U(12), U(8), U(14), U(10)) };
             ShadowStyle = new GUIStyle { border = new RectOffset(ShadowBorder, ShadowBorder, ShadowBorder, ShadowBorder) };
@@ -102,7 +134,7 @@ namespace BetterBepInEx
             CardMid = CardPiece(false, false);
             CardBottom = CardPiece(false, true);
             CardSingle = CardPiece(true, true);
-            RowHover = Make(null, Rounded(new Color(1f, 1f, 1f, 0.035f), 6, null), 6);
+            RowHover = Make(null, Rounded(HoverOverlay, 6, null), 6);
             Card = Make(null, Rounded(CardBg, 8, CardBorder), 8);
             Card.padding = Offset(0, 0, U(4), U(4));
             Card.margin = Offset(0, U(4), U(2), U(10));
@@ -118,10 +150,10 @@ namespace BetterBepInEx
             // of view is replaced by a Space of its measured height, and margins are not measured.
             SectionHeader = TextStyle(11, MutedColor, FontStyle.Bold);
             SectionHeader.margin = Offset(0);
-            SectionHeader.padding = Offset(U(6), 0, U(20), U(8));
+            SectionHeader.padding = Offset(U(6), 0, compact ? U(12) : U(20), compact ? U(6) : U(8));
             GroupHeader = TextStyle(14, Accent, FontStyle.Bold);
             GroupHeader.margin = Offset(0);
-            GroupHeader.padding = Offset(U(4), 0, U(20), U(8));
+            GroupHeader.padding = Offset(U(4), 0, compact ? U(12) : U(20), compact ? U(6) : U(8));
             GroupHeader.hover.textColor = Color.white;
             GroupHeaderDanger = new GUIStyle(GroupHeader);
             GroupHeaderDanger.normal.textColor = Danger;
@@ -145,9 +177,9 @@ namespace BetterBepInEx
             BadgeDanger = new GUIStyle(Badge);
             BadgeDanger.normal.background = Rounded(Danger, 8, null);
             BadgeMuted = new GUIStyle(Badge);
-            BadgeMuted.normal.background = Rounded(Hex(0x2C3137), 8, null);
+            BadgeMuted.normal.background = Rounded(BadgeMutedBg, 8, null);
             BadgeMuted.normal.textColor = SoftText;
-            Tag = Make(TextStyle(10, MutedColor, FontStyle.Bold), Rounded(Hex(0x2A2E34), 6, null), 6);
+            Tag = Make(TextStyle(10, MutedColor, FontStyle.Bold), Rounded(TagBg, 6, null), 6);
             Tag.padding = Offset(U(6), U(6), U(1), U(2));
             Tag.margin = Offset(U(2), U(4), U(2), U(2));
 
@@ -156,7 +188,7 @@ namespace BetterBepInEx
             SidebarItem.hover.background = hover;
             SidebarItem.onNormal.background = selected;
             SidebarItem.onHover.background = selected;
-            SidebarItem.fixedHeight = U(32);
+            SidebarItem.fixedHeight = compact ? T(26) : T(32);
             SidebarItem.margin = Offset(0, 0, U(1), U(1));
             SidebarText = TextStyle(13, SoftText);
             SidebarText.padding = Offset(U(14), U(8), 0, 0);
@@ -211,13 +243,13 @@ namespace BetterBepInEx
             IconButton.fontSize = FontSize(18);
             IconButton.padding = Offset(0, 0, 0, U(2));
             IconButton.fixedWidth = U(34);
-            IconButton.fixedHeight = U(32);
+            IconButton.fixedHeight = T(32);
             LinkButton = TextStyle(12, Accent);
             LinkButton.hover.textColor = Color.white;
             LinkButton.padding = Offset(U(6), U(2), U(2), U(2));
             Dropdown = new GUIStyle(Button);
             Dropdown.normal.background = Rounded(InputBg, 6, InputBorder);
-            Dropdown.hover.background = Rounded(Hex(0x181B1F), 6, Hex(0x3A4048));
+            Dropdown.hover.background = Rounded(FieldHoverBg, 6, InputHoverBorder);
             Dropdown.alignment = TextAnchor.MiddleLeft;
             Dropdown.padding = Offset(U(12), U(28), U(6), U(7));
             Dropdown.clipping = TextClipping.Clip;
@@ -226,42 +258,43 @@ namespace BetterBepInEx
             // ---------------------------------------------------------------- inputs
             Texture2D input = Rounded(InputBg, 6, InputBorder);
             TextField = Make(TextStyle(13, TextColor), input, 6);
-            TextField.hover.background = Rounded(InputBg, 6, Hex(0x3A4048));
+            TextField.hover.background = Rounded(InputBg, 6, InputHoverBorder);
             TextField.focused.background = Rounded(InputBg, 6, Accent);
             TextField.focused.textColor = Color.white;
             TextField.padding = Offset(U(10), U(10), U(6), U(7));
             TextField.margin = Offset(0, 0, U(2), U(2));
             TextField.clipping = TextClipping.Clip;
             SearchField = new GUIStyle(TextField);
-            SearchField.normal.background = Rounded(Hex(0x0F1114), 15, InputBorder);
-            SearchField.hover.background = Rounded(Hex(0x0F1114), 15, Hex(0x3A4048));
-            SearchField.focused.background = Rounded(Hex(0x0F1114), 15, Accent);
+            SearchField.normal.background = Rounded(SearchBg, 15, InputBorder);
+            SearchField.hover.background = Rounded(SearchBg, 15, InputHoverBorder);
+            SearchField.focused.background = Rounded(SearchBg, 15, Accent);
             SearchField.border = new RectOffset(R(15) + 1, R(15) + 1, R(15) + 1, R(15) + 1);
             SearchField.fontSize = FontSize(14);
-            SearchField.fixedHeight = U(34);
+            SearchField.fixedHeight = T(34);
             SearchField.padding = Offset(U(38), U(14), U(7), U(7));
             NumberField = new GUIStyle(TextField);
             NumberField.alignment = TextAnchor.MiddleRight;
+            RenameField = new GUIStyle(TextField) { fontSize = FontSize(18), fontStyle = FontStyle.Bold };
             SidebarFilter = new GUIStyle(SearchField);
             SidebarFilter.fontSize = FontSize(13);
-            SidebarFilter.fixedHeight = U(30);
+            SidebarFilter.fixedHeight = T(30);
             SidebarFilter.padding = Offset(U(34), U(12), U(6), U(6));
             KeyHint = TextStyle(13, MutedColor);
             KeyHintActive = TextStyle(13, Accent, FontStyle.Bold);
             KeyField = Make(TextStyle(13, MutedColor), input, 6);
-            KeyField.hover.background = Rounded(Hex(0x181B1F), 6, Hex(0x3A4048));
+            KeyField.hover.background = Rounded(FieldHoverBg, 6, InputHoverBorder);
             KeyField.padding = Offset(U(8), U(8), 0, 0);
             KeyField.margin = Offset(0, 0, U(2), U(2));
-            KeyField.fixedHeight = U(34);
+            KeyField.fixedHeight = T(34);
             KeyFieldActive = new GUIStyle(KeyField);
-            KeyFieldActive.normal.background = Rounded(Hex(0x1E1B12), 6, Accent);
+            KeyFieldActive.normal.background = Rounded(Color.Lerp(InputBg, Accent, 0.08f), 6, Accent);
             KeyFieldActive.hover.background = KeyFieldActive.normal.background;
             KeyFieldActive.normal.textColor = Accent;
             KeyFieldActive.hover.textColor = Accent;
             Keycap = Make(TextStyle(12, TextColor, FontStyle.Bold), Keycap3D(), 4);
             Keycap.alignment = TextAnchor.MiddleCenter;
             Keycap.padding = Offset(U(8), U(8), U(2), U(4));
-            Keycap.fixedHeight = U(24);
+            Keycap.fixedHeight = T(24);
             KeyPlus = TextStyle(12, MutedColor);
             KeyPlus.alignment = TextAnchor.MiddleCenter;
 
@@ -273,7 +306,7 @@ namespace BetterBepInEx
             Chip.margin = Offset(U(2), U(2), U(2), U(2));
             Chip.alignment = TextAnchor.MiddleCenter;
             ChipOn = new GUIStyle(Chip);
-            ChipOn.normal.background = Rounded(Hex(0x3A3220), 12, Accent);
+            ChipOn.normal.background = Rounded(AccentSoft, 12, Accent);
             ChipOn.hover.background = ChipOn.normal.background;
             ChipOn.normal.textColor = Accent;
             ChipOn.hover.textColor = Color.Lerp(Accent, Color.white, 0.3f);
@@ -285,7 +318,7 @@ namespace BetterBepInEx
             RowStyle.padding = Offset(U(16), U(14), U(11), U(11));
             RowStyle.margin = Offset(0);
 
-            Popup = Make(null, Rounded(Hex(0x1C1F24), 8, Hex(0x353B43)), 8);
+            Popup = Make(null, Rounded(PopupBg, 8, PopupBorder), 8);
             Popup.padding = Offset(U(4), U(4), U(4), U(4));
             PopupItem = Make(TextStyle(13, SoftText), null, 6);
             PopupItem.hover.background = hover;
@@ -298,7 +331,7 @@ namespace BetterBepInEx
 
             Status = TextStyle(12, MutedColor);
             Status.padding = Offset(U(18), U(18), U(6), U(6));
-            Tooltip = Make(TextStyle(12, TextColor), Rounded(Hex(0x0C0D0F, 0.97f), 6, Hex(0x353B43)), 6);
+            Tooltip = Make(TextStyle(12, TextColor), Rounded(TooltipBg, 6, PopupBorder), 6);
             Tooltip.wordWrap = true;
             Tooltip.padding = Offset(U(12), U(12), U(8), U(9));
 
@@ -335,7 +368,7 @@ namespace BetterBepInEx
             GuiSkin.verticalScrollbar = Make(null, null, 4);
             GuiSkin.verticalScrollbar.fixedWidth = U(6);
             GuiSkin.verticalScrollbar.margin = Offset(U(4), U(2), U(2), U(2));
-            GuiSkin.verticalScrollbarThumb = Make(null, Rounded(Hex(0x3A4047), 3, null), 3);
+            GuiSkin.verticalScrollbarThumb = Make(null, Rounded(ScrollThumb, 3, null), 3);
             GuiSkin.verticalScrollbarThumb.fixedWidth = U(6);
             GuiSkin.verticalScrollbarUpButton = GUIStyle.none;
             GuiSkin.verticalScrollbarDownButton = GUIStyle.none;
@@ -378,7 +411,7 @@ namespace BetterBepInEx
         private GUIStyle CardPiece(bool top, bool bottom)
         {
             GUIStyle s = Make(null, RoundedPart(CardBg, 8, CardBorder, top, bottom), 8);
-            s.padding = Offset(U(18), U(16), U(12), U(12));
+            s.padding = Options.Compact ? Offset(U(16), U(14), U(6), U(6)) : Offset(U(18), U(16), U(12), U(12));
             s.margin = Offset(0);
             return s;
         }
@@ -390,7 +423,103 @@ namespace BetterBepInEx
         /// </summary>
         private int R(int basePx) => Mathf.Max(1, Mathf.RoundToInt(basePx * Scale));
 
-        private int FontSize(int basePx) => Mathf.Max(8, Mathf.RoundToInt(basePx * Scale));
+        private int FontSize(int basePx) => Mathf.Max(8, Mathf.RoundToInt(basePx * Scale * Options.TextScale));
+
+        /// <summary>Sets the static palette for a theme. The accent is the player's own colour.</summary>
+        private static void ApplyPalette(MenuTheme theme, Color accent)
+        {
+            Danger = Hex(0xE06C60);
+            DangerBg = Hex(0x3A1F1C);
+            HoverOverlay = new Color(1f, 1f, 1f, 0.035f);
+            switch (theme)
+            {
+                case MenuTheme.Black:
+                    Set(window: 0x050506, outline: 0x1E2024, card: 0x0D0E10, cardBorder: 0x1B1D21, divider: 0x1A1C1F,
+                        hover: 0x16181B, selected: 0x1A1C20, input: 0x000000, inputBorder: 0x25282D, inputHover: 0x343840,
+                        fieldHover: 0x0A0B0C, search: 0x000000, button: 0x16181B, buttonHover: 0x202327, buttonActive: 0x2A2E33,
+                        text: 0xECE8DF, soft: 0xBDC0C4, muted: 0x878C93, track: 0x2A2D33, keycap: 0x1F2226, keycapEdge: 0x2F333A,
+                        keycapLip: 0x050506, tag: 0x1C1E22, badge: 0x22252A, scroll: 0x2C3036, popup: 0x0E0F11,
+                        popupBorder: 0x2A2D33, tooltip: 0x000000);
+                    break;
+                case MenuTheme.Grey:
+                    Set(window: 0x2B2E34, outline: 0x454A52, card: 0x34383F, cardBorder: 0x40454D, divider: 0x3D4249,
+                        hover: 0x3D4249, selected: 0x40454D, input: 0x23262B, inputBorder: 0x4A4F58, inputHover: 0x5A606A,
+                        fieldHover: 0x272A30, search: 0x23262B, button: 0x40454D, buttonHover: 0x4B515A, buttonActive: 0x575D67,
+                        text: 0xF3F1EC, soft: 0xD5D8DC, muted: 0xA6ACB3, track: 0x50565F, keycap: 0x474C55, keycapEdge: 0x585E68,
+                        keycapLip: 0x2A2D32, tag: 0x41464E, badge: 0x474C55, scroll: 0x555B64, popup: 0x30343A,
+                        popupBorder: 0x4F555E, tooltip: 0x1E2024);
+                    HoverOverlay = new Color(1f, 1f, 1f, 0.05f);
+                    break;
+                case MenuTheme.HighContrast:
+                    Set(window: 0x000000, outline: 0x8A8A8A, card: 0x0B0B0B, cardBorder: 0x707070, divider: 0x4A4A4A,
+                        hover: 0x222222, selected: 0x2C2C2C, input: 0x000000, inputBorder: 0xA0A0A0, inputHover: 0xDADADA,
+                        fieldHover: 0x111111, search: 0x000000, button: 0x222222, buttonHover: 0x383838, buttonActive: 0x4A4A4A,
+                        text: 0xFFFFFF, soft: 0xFFFFFF, muted: 0xD0D0D0, track: 0x5A5A5A, keycap: 0x262626, keycapEdge: 0x9A9A9A,
+                        keycapLip: 0x000000, tag: 0x2A2A2A, badge: 0x333333, scroll: 0x8A8A8A, popup: 0x050505,
+                        popupBorder: 0xA0A0A0, tooltip: 0x000000);
+                    Danger = Hex(0xFF6E61);
+                    HoverOverlay = new Color(1f, 1f, 1f, 0.08f);
+                    break;
+                case MenuTheme.Tan:
+                    Set(window: 0x1A1814, outline: 0x3A342B, card: 0x221F1A, cardBorder: 0x332E26, divider: 0x2E2A22,
+                        hover: 0x2B2720, selected: 0x302B23, input: 0x14120F, inputBorder: 0x3A342B, inputHover: 0x4A4337,
+                        fieldHover: 0x181612, search: 0x12100D, button: 0x2D2821, buttonHover: 0x38322A, buttonActive: 0x433C32,
+                        text: 0xEDE4D0, soft: 0xCFC4AE, muted: 0x9A8F7A, track: 0x463F35, keycap: 0x37312A, keycapEdge: 0x4A4337,
+                        keycapLip: 0x12100D, tag: 0x2F2A22, badge: 0x37312A, scroll: 0x4A4337, popup: 0x211E19,
+                        popupBorder: 0x40392F, tooltip: 0x0F0E0C);
+                    break;
+                default:
+                    Set(window: 0x16181C, outline: 0x2E333A, card: 0x1D2025, cardBorder: 0x272B31, divider: 0x262A30,
+                        hover: 0x252930, selected: 0x262A31, input: 0x111316, inputBorder: 0x2C3138, inputHover: 0x3A4048,
+                        fieldHover: 0x181B1F, search: 0x0F1114, button: 0x262A30, buttonHover: 0x30353C, buttonActive: 0x3A4048,
+                        text: 0xECE8DF, soft: 0xC2C5C9, muted: 0x8E949B, track: 0x3A3F46, keycap: 0x2B3037, keycapEdge: 0x3B424B,
+                        keycapLip: 0x15181C, tag: 0x2A2E34, badge: 0x2C3137, scroll: 0x3A4047, popup: 0x1C1F24,
+                        popupBorder: 0x353B43, tooltip: 0x0C0D0F);
+                    break;
+            }
+
+            accent.a = 1f;
+            Accent = accent;
+            // Dark text on a light accent, white on a dark one, by perceived brightness.
+            float luminance = 0.299f * accent.r + 0.587f * accent.g + 0.114f * accent.b;
+            AccentText = luminance > 0.55f ? Hex(0x17140C) : Color.white;
+            AccentSoft = Color.Lerp(CardBg, accent, 0.18f);
+        }
+
+        private static void Set(int window, int outline, int card, int cardBorder, int divider, int hover, int selected,
+            int input, int inputBorder, int inputHover, int fieldHover, int search, int button, int buttonHover,
+            int buttonActive, int text, int soft, int muted, int track, int keycap, int keycapEdge, int keycapLip,
+            int tag, int badge, int scroll, int popup, int popupBorder, int tooltip)
+        {
+            WindowBg = Hex(window);
+            WindowOutline = Hex(outline);
+            CardBg = Hex(card);
+            CardBorder = Hex(cardBorder);
+            Divider = Hex(divider);
+            Hover = Hex(hover);
+            Selected = Hex(selected);
+            InputBg = Hex(input);
+            InputBorder = Hex(inputBorder);
+            InputHoverBorder = Hex(inputHover);
+            FieldHoverBg = Hex(fieldHover);
+            SearchBg = Hex(search);
+            ButtonBg = Hex(button);
+            ButtonHover = Hex(buttonHover);
+            ButtonActive = Hex(buttonActive);
+            TextColor = Hex(text);
+            SoftText = Hex(soft);
+            MutedColor = Hex(muted);
+            TrackOffColor = Hex(track);
+            KeycapBg = Hex(keycap);
+            KeycapEdge = Hex(keycapEdge);
+            KeycapLip = Hex(keycapLip);
+            TagBg = Hex(tag);
+            BadgeMutedBg = Hex(badge);
+            ScrollThumb = Hex(scroll);
+            PopupBg = Hex(popup);
+            PopupBorder = Hex(popupBorder);
+            TooltipBg = Hex(tooltip, 0.97f);
+        }
 
         private GUIStyle TextStyle(int size, Color color, FontStyle style = FontStyle.Normal)
         {
@@ -534,7 +663,7 @@ namespace BetterBepInEx
                     float d = CornerDistance(x + 0.5f, y + 0.5f, size, radius);
                     float coverage = Mathf.Clamp01(radius - d + 0.5f);
                     // Texture rows run bottom-up, so y == 0 is the bottom edge.
-                    Color c = y < 2 ? Hex(0x15181C) : Color.Lerp(KeycapBg, KeycapEdge, 1f - Mathf.Clamp01(radius - 1f - d + 0.5f));
+                    Color c = y < 2 ? KeycapLip : Color.Lerp(KeycapBg, KeycapEdge, 1f - Mathf.Clamp01(radius - 1f - d + 0.5f));
                     c.a *= coverage;
                     pixels[y * size + x] = c;
                 }

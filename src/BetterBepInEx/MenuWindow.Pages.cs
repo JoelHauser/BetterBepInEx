@@ -159,7 +159,7 @@ namespace BetterBepInEx
         {
             GUILayout.BeginHorizontal();
             GUILayout.BeginVertical();
-            Header(page.Title, page.Subtitle);
+            DrawPageTitle(page);
             GUILayout.EndVertical();
             GUILayout.FlexibleSpace();
 
@@ -167,6 +167,15 @@ namespace BetterBepInEx
             if (GUILayout.Button(favorite ? "Favorite" : "Add to favorites", favorite ? _skin.ChipOn : _skin.Ghost, GUILayout.ExpandWidth(false)))
             {
                 ToggleFavorite(page);
+            }
+            if (_renaming != page && GUILayout.Button(new GUIContent("Rename", "Give this mod a different name in the list"), _skin.Ghost, GUILayout.ExpandWidth(false)))
+            {
+                StartRename(page);
+            }
+            if (GUILayout.Button(page.UserHidden ? new GUIContent("Show in list") : new GUIContent("Hide", "Hide this mod from the mods list"),
+                    page.UserHidden ? _skin.ChipOn : _skin.Ghost, GUILayout.ExpandWidth(false)))
+            {
+                ToggleUserHidden(page);
             }
             if (page.Website != null && GUILayout.Button(Cached("Website"), _skin.Ghost, GUILayout.ExpandWidth(false)))
             {

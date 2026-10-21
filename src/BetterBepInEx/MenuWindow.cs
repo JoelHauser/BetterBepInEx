@@ -93,6 +93,7 @@ namespace BetterBepInEx
                 }
             }
             _page = string.IsNullOrEmpty(_plugin.LastPage.Value) ? PageChanged : _plugin.LastPage.Value;
+            LoadCustomizations();
         }
 
         private float U(float v) => _skin.U(v);
@@ -112,6 +113,8 @@ namespace BetterBepInEx
 
         public void OnModelRebuilt()
         {
+            _renaming = null;
+            ApplyCustomizations();
             _searchDirty = true;
             _failedRows.Clear();
             _conflictLabels.Clear();
@@ -142,6 +145,8 @@ namespace BetterBepInEx
 
         public void OnOpen()
         {
+            // "Recently opened" re-sorts here, not on each click, so the list holds still while in use.
+            _sortDirty = true;
             Passive = false;
             _alpha = 1f;
             _focusSearch = true;
@@ -161,6 +166,11 @@ namespace BetterBepInEx
             _resizing = false;
             SaveRect();
             _plugin.LastPage.Value = _page ?? string.Empty;
+            SaveRecent();
+            if (_renaming != null)
+            {
+                CommitRename();
+            }
             // The skin is kept: rebuilding its textures is most of what reopening would cost.
         }
 
@@ -170,9 +180,16 @@ namespace BetterBepInEx
         {
             float scale = _plugin.EffectiveScale();
             Font font = _plugin.GameFont();
-            if (_skin.GuiSkin == null || !Mathf.Approximately(_skin.Scale, scale) || _skin.Font != font)
+            SkinOptions options = new SkinOptions
             {
-                _skin.Build(scale, font);
+                Theme = _plugin.Theme.Value,
+                Accent = _plugin.AccentColor.Value,
+                TextScale = Mathf.Clamp(_plugin.TextSize.Value, 0.7f, 1.6f),
+                Compact = _plugin.CompactRows.Value,
+            };
+            if (_skin.GuiSkin == null || !Mathf.Approximately(_skin.Scale, scale) || _skin.Font != font || !_skin.Options.SameAs(options))
+            {
+                _skin.Build(scale, font, options);
                 _countLabels.Clear();
                 ResetVirtualization();
             }
@@ -281,8 +298,8 @@ namespace BetterBepInEx
             {
                 HandleKeys(Event.current);
 
-                float titleHeight = U(60);
-                float statusHeight = U(30);
+                float titleHeight = _skin.T(34) + U(26);
+                float statusHeight = _skin.T(30);
                 float sidebarWidth = Mathf.Clamp(U(260), U(170), _rect.width * 0.32f);
 
                 GUILayout.BeginArea(new Rect(0, 0, _rect.width, titleHeight), _skin.TitleBar);
@@ -360,6 +377,13 @@ namespace BetterBepInEx
             bool ctrl = e.control || e.command;
             bool typing = GUIUtility.keyboardControl != 0;
 
+            if ((e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter) && _renaming != null)
+            {
+                CommitRename();
+                GUIUtility.keyboardControl = 0;
+                e.Use();
+                return;
+            }
             if ((e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter) && _editingRow != null)
             {
                 CommitEdit();
@@ -391,7 +415,7 @@ namespace BetterBepInEx
         private void DrawTitleBar()
         {
             GUILayout.BeginHorizontal();
-            GUILayout.Label(TitleLabel, _skin.Title, GUILayout.ExpandWidth(false), GUILayout.Height(U(34)));
+            GUILayout.Label(TitleLabel, _skin.Title, GUILayout.ExpandWidth(false), GUILayout.Height(_skin.T(34)));
             GUILayout.Space(U(20));
 
             string typed = SearchBox(SearchControl, _search, SearchHint, _skin.SearchField,
@@ -400,7 +424,7 @@ namespace BetterBepInEx
             {
                 SetSearch(typed);
             }
-            if (_search.Length > 0 && GUILayout.Button("Clear", _skin.Ghost, GUILayout.ExpandWidth(false), GUILayout.Height(U(34))))
+            if (_search.Length > 0 && GUILayout.Button("Clear", _skin.Ghost, GUILayout.ExpandWidth(false), GUILayout.Height(_skin.T(34))))
             {
                 SetSearch(string.Empty);
                 _focusSearch = true;
@@ -415,13 +439,13 @@ namespace BetterBepInEx
 
             GUI.enabled = _model.History.CanUndo;
             UndoLabel.tooltip = UndoTip();
-            if (GUILayout.Button(UndoLabel, _skin.Ghost, GUILayout.ExpandWidth(false), GUILayout.Height(U(34))))
+            if (GUILayout.Button(UndoLabel, _skin.Ghost, GUILayout.ExpandWidth(false), GUILayout.Height(_skin.T(34))))
             {
                 Undo();
             }
             GUI.enabled = _model.History.CanRedo;
             RedoLabel.tooltip = RedoTip();
-            if (GUILayout.Button(RedoLabel, _skin.Ghost, GUILayout.ExpandWidth(false), GUILayout.Height(U(34))))
+            if (GUILayout.Button(RedoLabel, _skin.Ghost, GUILayout.ExpandWidth(false), GUILayout.Height(_skin.T(34))))
             {
                 Redo();
             }
@@ -513,8 +537,9 @@ namespace BetterBepInEx
 
             SearchQuery filter = _modFilterQuery;
 
+            List<Page> pages = SortedPages();
             bool anyFavorite = false;
-            foreach (Page page in _model.Pages)
+            foreach (Page page in pages)
             {
                 if (!_favorites.Contains(page.Guid) || !SidebarShows(page, filter))
                 {
@@ -529,7 +554,7 @@ namespace BetterBepInEx
             }
 
             GUILayout.BeginHorizontal();
-            int listed = ShowHidden ? _model.Pages.Count : _model.Pages.Count - _model.HiddenPageCount;
+            int listed = ShowHidden ? _model.Pages.Count : _model.Pages.Count - _hiddenListCount;
             GUILayout.Label(CountedLabel("MODS  ", listed, 1), _skin.SidebarHeader);
             GUILayout.FlexibleSpace();
             if (GUILayout.Button(_modsChangedOnly ? "Changed only" : "All", _skin.SidebarToggle, GUILayout.ExpandWidth(false)))
@@ -537,13 +562,13 @@ namespace BetterBepInEx
                 _modsChangedOnly = !_modsChangedOnly;
             }
             GUILayout.EndHorizontal();
-            if (_model.HiddenPageCount > 0)
+            if (_hiddenListCount > 0)
             {
-                // Mods with no settings, or whose author hid all of them. The stock menu never
-                // listed these at all.
+                // Mods with no settings, mods whose author hid all of them (the stock menu never
+                // listed either), and mods the player hid from the list.
                 GUIContent toggle = ShowHidden
-                    ? CountedLabel("Hide hidden mods  ", _model.HiddenPageCount, 5)
-                    : CountedLabel("Show hidden mods  ", _model.HiddenPageCount, 6);
+                    ? CountedLabel("Hide hidden mods  ", _hiddenListCount, 5)
+                    : CountedLabel("Show hidden mods  ", _hiddenListCount, 6);
                 if (GUILayout.Button(toggle, _skin.SidebarHiddenToggle, GUILayout.ExpandWidth(true)))
                 {
                     ToggleHidden();
@@ -551,13 +576,25 @@ namespace BetterBepInEx
             }
 
             int shown = 0;
-            foreach (Page page in _model.Pages)
+            bool byAuthor = _sortedBy == ModSort.Author;
+            string lastAuthor = null;
+            foreach (Page page in pages)
             {
-                if (SidebarShows(page, filter))
+                if (!SidebarShows(page, filter))
                 {
-                    SidebarPage(page);
-                    shown++;
+                    continue;
                 }
+                if (byAuthor)
+                {
+                    string author = string.IsNullOrEmpty(page.Author) ? "OTHER" : page.Author.ToUpperInvariant();
+                    if (author != lastAuthor)
+                    {
+                        GUILayout.Label(Cached(author), _skin.SidebarHeader);
+                        lastAuthor = author;
+                    }
+                }
+                SidebarPage(page);
+                shown++;
             }
             if (shown == 0)
             {
@@ -569,7 +606,7 @@ namespace BetterBepInEx
 
         private bool SidebarShows(Page page, SearchQuery filter)
         {
-            if (_modsChangedOnly && page.ChangedCount == 0 || page.IsHidden && !ShowHidden)
+            if (_modsChangedOnly && page.ChangedCount == 0 || ListHidden(page) && !ShowHidden)
             {
                 return false;
             }
@@ -580,7 +617,7 @@ namespace BetterBepInEx
         private void SidebarPage(Page page)
         {
             bool selected = _query.IsEmpty && _page == page.Guid;
-            if (SidebarButton(page.SidebarLabel, selected, page.ChangedCount, _skin.BadgeMuted, page.IsHidden))
+            if (SidebarButton(page.SidebarLabel, selected, page.ChangedCount, _skin.BadgeMuted, ListHidden(page)))
             {
                 Select(page.Guid);
             }
@@ -638,8 +675,13 @@ namespace BetterBepInEx
             if (_page != page)
             {
                 _filter = RowFilter.All;
+                _renaming = null;
             }
             _page = page;
+            if (!page.StartsWith("@", StringComparison.Ordinal))
+            {
+                NoteOpened(page);
+            }
         }
 
         private GUIContent CountLabel(int count)

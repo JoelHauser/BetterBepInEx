@@ -30,7 +30,7 @@ namespace BetterBepInEx
         public const string PluginName = "BetterBepInEx";
 
         /// <summary>Must match the csproj's Version. Two places, and they have to agree.</summary>
-        public const string PluginVersion = "0.3.1";
+        public const string PluginVersion = "0.4.0";
 
         private const string GameFontHint = "Bender";
 
@@ -51,6 +51,14 @@ namespace BetterBepInEx
         internal ConfigEntry<string> WindowRect;
         internal ConfigEntry<string> Favorites;
         internal ConfigEntry<string> LastPage;
+        internal ConfigEntry<MenuTheme> Theme;
+        internal ConfigEntry<Color> AccentColor;
+        internal ConfigEntry<float> TextSize;
+        internal ConfigEntry<bool> CompactRows;
+        internal ConfigEntry<ModSort> SortMods;
+        internal ConfigEntry<string> RenamedMods;
+        internal ConfigEntry<string> HiddenMods;
+        internal ConfigEntry<string> RecentMods;
 
         private StockManager _stock;
         private SettingsModel _model;
@@ -92,6 +100,18 @@ namespace BetterBepInEx
             ShowHidden = Config.Bind("General", "Show hidden and advanced", false,
                 "Show settings their mod marks as advanced. Search always finds them.");
 
+            Theme = Config.Bind("Look", "Theme", MenuTheme.Dark,
+                "The menu's colours. Black suits OLED screens; High contrast is easiest to read.");
+            AccentColor = Config.Bind("Look", "Accent color", new Color(0.839f, 0.718f, 0.431f, 1f),
+                "The colour of switches, sliders, badges and the selected mod. EFT's tan by default.");
+            TextSize = Config.Bind("Look", "Text size", 1f, new ConfigDescription(
+                "Size of the text, on top of Menu scale: bigger text in the same window, or smaller.",
+                new AcceptableValueRange<float>(0.8f, 1.5f)));
+            CompactRows = Config.Bind("Look", "Compact rows", false,
+                "Less space around each setting, so more fit on screen.");
+            SortMods = Config.Bind("Mods list", "Sort mods by", ModSort.Name,
+                "The order of the mods list. Recently opened puts the mods you opened last at the top, "
+                + "the next time the menu opens. Author groups each author's mods under their name.");
             MenuScale = Config.Bind("Look", "Menu scale", 1f, new ConfigDescription(
                 "Size of the menu text and controls. 1 is the normal size for your screen.",
                 new AcceptableValueRange<float>(0.6f, 2f)));
@@ -126,6 +146,9 @@ namespace BetterBepInEx
             WindowRect = Config.Bind("Window", "Rect", string.Empty, new ConfigDescription("Window position and size, as fractions of the screen.", null, "Hidden"));
             Favorites = Config.Bind("Window", "Favorites", string.Empty, new ConfigDescription("GUIDs of favourite mods.", null, "Hidden"));
             LastPage = Config.Bind("Window", "Last page", string.Empty, new ConfigDescription("The page open when the menu closed.", null, "Hidden"));
+            RenamedMods = Config.Bind("Window", "Renamed mods", string.Empty, new ConfigDescription("Names given to mods in the list, one GUID and name per line.", null, "Hidden"));
+            HiddenMods = Config.Bind("Window", "Hidden mods", string.Empty, new ConfigDescription("GUIDs of mods hidden from the list.", null, "Hidden"));
+            RecentMods = Config.Bind("Window", "Recent mods", string.Empty, new ConfigDescription("GUIDs of mods opened most recently, newest first.", null, "Hidden"));
 
             _stock = new StockManager();
             if (!_stock.Resolve(Logger))

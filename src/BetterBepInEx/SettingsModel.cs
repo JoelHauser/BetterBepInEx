@@ -77,6 +77,9 @@ namespace BetterBepInEx
         /// <summary>IMGUI control name for this row's text field, so focus can be checked by row.</summary>
         public string ControlName;
         public string Haystack;
+
+        /// <summary>The haystack as built, before a player's name for the mod is added to it.</summary>
+        public string BaseHaystack;
         public bool IsChanged;
         public bool IsAdvanced;
 
@@ -146,6 +149,17 @@ namespace BetterBepInEx
     {
         public string Guid;
         public string DisplayName;
+
+        /// <summary>The readable name worked out from the plugin's own; what a rename falls back to.</summary>
+        public string AutoName;
+
+        /// <summary>The name the player gave this mod, or null.</summary>
+        public string CustomName;
+
+        /// <summary>Hidden from the mods list by the player (shown again by "Show hidden mods").</summary>
+        public bool UserHidden;
+
+        public string BaseSubtitle;
         public string OriginalName;
         public string SortKey;
         public string Version;
@@ -305,6 +319,7 @@ namespace BetterBepInEx
             {
                 Guid = info.GUID,
                 DisplayName = display,
+                AutoName = display,
                 OriginalName = info.Name ?? string.Empty,
                 SortKey = DisplayNames.SortKey(display),
                 Version = info.Version == null ? string.Empty : info.Version.ToString(),
@@ -313,8 +328,8 @@ namespace BetterBepInEx
                 Website = WebsiteOf(plugin),
             };
             page.Title = new GUIContent(display);
-            page.Subtitle = new GUIContent(
-                "v" + page.Version + (page.Author != null ? "  \u00B7  " + page.Author : string.Empty) + "  \u00B7  " + info.GUID);
+            page.BaseSubtitle = "v" + page.Version + (page.Author != null ? "  \u00B7  " + page.Author : string.Empty) + "  \u00B7  " + info.GUID;
+            page.Subtitle = new GUIContent(page.BaseSubtitle);
             page.SidebarLabel = new GUIContent(display);
             PagesByGuid[info.GUID] = page;
             Pages.Add(page);
@@ -344,6 +359,7 @@ namespace BetterBepInEx
                            && !row.IsReadOnly;
             row.DescriptionContent = row.Description == null ? null : new GUIContent(row.Description);
             row.Haystack = SearchQuery.Haystack(page.DisplayName, page.OriginalName, page.Guid, page.Author, section, name, setting.Description);
+            row.BaseHaystack = row.Haystack;
             row.Kind = Classify(setting, row);
             row.Category = CategoryOf(row.Kind);
             row.InitDefault();
