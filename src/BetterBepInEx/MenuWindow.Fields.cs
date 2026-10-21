@@ -565,7 +565,7 @@ namespace BetterBepInEx
                     StartCapture(row);
                 }
             }
-            if (caps.Length > 0 && !capturing)
+            if (caps.Length > 0 && !capturing && !row.IsMenuHotkey)
             {
                 if (GUILayout.Button(UnbindLabel, _skin.IconButton))
                 {
@@ -640,6 +640,9 @@ namespace BetterBepInEx
 
         private void StartCapture(Row row)
         {
+            // Clicking a second keybind while one is listening: end the first properly, or the
+            // hotkey override it saved would be saved again as "true" and F12 would stay ignored.
+            CancelCapture();
             CommitEdit();
             ClosePopup();
             _capturing = row;

@@ -91,6 +91,13 @@ namespace BetterBepInEx
         public bool IsHidden;
         public bool IsReadOnly;
         public bool CanReset;
+
+        /// <summary>
+        /// The key that opens this menu. BepInEx's default for it is F1, but SPT ships it as F12, so
+        /// it never counts as changed and is never reset or unbound: either would leave the player
+        /// with a menu that no longer opens on the key they know.
+        /// </summary>
+        public bool IsMenuHotkey;
         public object[] Options;
         public GUIContent[] OptionLabels;
 
@@ -121,6 +128,11 @@ namespace BetterBepInEx
 
         public void RefreshChanged()
         {
+            if (IsMenuHotkey)
+            {
+                IsChanged = false;
+                return;
+            }
             object def = Setting.DefaultValue;
             if (def == null && !Setting.SettingType.IsClass)
             {
@@ -240,7 +252,8 @@ namespace BetterBepInEx
             // only happens when the set of settings changed, not on every open.
             History.Clear();
 
-            foreach (SettingEntryBase setting in settings.Concat(extra))
+            HashSet<SettingEntryBase> extras = new HashSet<SettingEntryBase>(extra);
+            foreach (SettingEntryBase setting in settings.Concat(extras))
             {
                 if (setting == null || setting.PluginInfo == null)
                 {
@@ -250,6 +263,13 @@ namespace BetterBepInEx
                 Row row = MakeRow(setting, page);
                 row.IsHidden = setting.Browsable == false
                                || setting.PluginInstance != null && StockManager.IsHidden(setting.PluginInstance.GetType());
+                if (extras.Contains(setting))
+                {
+                    // The only extra row is the stock menu's own hotkey; see Row.IsMenuHotkey.
+                    row.IsMenuHotkey = true;
+                    row.CanReset = false;
+                    row.RefreshChanged();
+                }
                 page.Rows.Add(row);
                 AllRows.Add(row);
                 if (row.Entry != null)
