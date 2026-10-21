@@ -1,0 +1,74 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- net472 because that is what the game's mono runtime loads. -->
+    <TargetFramework>net472</TargetFramework>
+    <RootNamespace>F12Overhaul</RootNamespace>
+    <AssemblyName>F12Overhaul</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+
+    <!-- Must match F12OverhaulPlugin.PluginVersion. -->
+    <Version>0.2.0</Version>
+
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <SPTPath Condition="'$(SPTPath)' == ''">H:\SPT4.1.X</SPTPath>
+    <GameManaged>$(SPTPath)\EscapeFromTarkov_Data\Managed</GameManaged>
+    <BepInExCore>$(SPTPath)\BepInEx\core</BepInExCore>
+    <StockManagerDll>$(SPTPath)\BepInEx\plugins\spt\ConfigurationManager\ConfigurationManager.dll</StockManagerDll>
+  </PropertyGroup>
+
+  <Target Name="ValidateSPTPath" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(BepInExCore)\BepInEx.dll')"
+           Text="SPTPath ('$(SPTPath)') is not an SPT install root: no BepInEx\core\BepInEx.dll." />
+    <Error Condition="!Exists('$(StockManagerDll)')"
+           Text="No Configuration Manager at '$(StockManagerDll)'. SPT ships it; this mod builds on it." />
+  </Target>
+
+  <!--
+    Deliberately NOT referenced: Assembly-CSharp. The one game member this uses (the raid's
+    ignore-input flag) is resolved by name at runtime; see InputBlocker.cs.
+  -->
+  <ItemGroup>
+    <Reference Include="BepInEx">
+      <HintPath>$(BepInExCore)\BepInEx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExCore)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!--
+      The stock F12 menu SPT ships. Its setting list, its attribute parsing and its field drawers
+      are reused, so mods with custom drawers keep working. Public types are used directly; the
+      internal ones go through StockManager.cs.
+    -->
+    <Reference Include="ConfigurationManager">
+      <HintPath>$(StockManagerDll)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine">
+      <HintPath>$(GameManaged)\UnityEngine.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>$(GameManaged)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>$(GameManaged)\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>$(GameManaged)\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>$(GameManaged)\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
