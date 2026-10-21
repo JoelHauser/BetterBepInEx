@@ -3,19 +3,19 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-namespace F12Overhaul.Core
+namespace BetterBepInEx.Core
 {
     /// <summary>
-    /// The text format for saved profiles and for settings copied to the clipboard. One setting per
-    /// line, tab separated: plugin GUID, section, key, value. Lines starting with '#' are comments.
+    /// The text format for settings copied to the clipboard. One setting per line, tab separated:
+    /// plugin GUID, section, key, value. Lines starting with '#' are comments.
     ///
     /// Tabs are safe as the separator. BepInEx refuses tabs in section and key names, and its
     /// serializer escapes tabs and newlines inside string values, so a value is always one line.
     /// The value is the last field and is split off with a limit, so a stray tab in it survives.
     /// </summary>
-    public static class ProfileFormat
+    public static class SettingsText
     {
-        public const string Magic = "# F12 Overhaul settings";
+        public const string Magic = "# BetterBepInEx settings";
 
         public sealed class Record
         {
@@ -93,30 +93,6 @@ namespace F12Overhaul.Core
         public static bool LooksLikeSettings(string text)
         {
             return text != null && text.TrimStart().StartsWith(Magic, StringComparison.Ordinal);
-        }
-
-        /// <summary>
-        /// Turns a profile name into a file name: invalid characters become '_', and the result is
-        /// trimmed and capped so it cannot escape the profiles folder or be empty.
-        /// </summary>
-        public static string SafeFileName(string name)
-        {
-            if (name == null)
-            {
-                return null;
-            }
-            StringBuilder sb = new StringBuilder();
-            char[] invalid = Path.GetInvalidFileNameChars();
-            foreach (char c in name.Trim())
-            {
-                sb.Append(Array.IndexOf(invalid, c) >= 0 || c == '.' && sb.Length == 0 ? '_' : c);
-            }
-            string result = sb.ToString().Trim();
-            if (result.Length > 60)
-            {
-                result = result.Substring(0, 60).TrimEnd();
-            }
-            return result.Length == 0 ? null : result;
         }
     }
 }

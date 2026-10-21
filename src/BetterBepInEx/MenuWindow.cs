@@ -2,10 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using BepInEx.Configuration;
-using F12Overhaul.Core;
+using BetterBepInEx.Core;
 using UnityEngine;
 
-namespace F12Overhaul
+namespace BetterBepInEx
 {
     /// <summary>
     /// The replacement F12 window: a title bar with search, a sidebar of mods and special pages,
@@ -21,21 +21,22 @@ namespace F12Overhaul
         private const int BackdropId = 0x0F1200;
         private const int WindowId = 0x0F1201;
         private const int PopupId = 0x0F1202;
-        private const string SearchControl = "f12search";
-        private const string ModFilterControl = "f12modfilter";
+        private const string SearchControl = "bbeSearch";
+        private const string ModFilterControl = "bbeModFilter";
 
         private const string PageChanged = "@changed";
         private const string PageKeybinds = "@keybinds";
-        private const string PageProfiles = "@profiles";
 
-        private readonly F12OverhaulPlugin _plugin;
+        private readonly BetterBepInExPlugin _plugin;
         private readonly StockManager _stock;
         private readonly SettingsModel _model;
-        private readonly Profiles _profiles = new Profiles();
         private readonly Skin _skin = new Skin();
 
         private Rect _rect;
         private bool _rectLoaded;
+
+        /// <summary>The screen size <see cref="_rect"/> was laid out for, to follow a resolution change.</summary>
+        private Vector2 _rectScreen;
         private string _search = string.Empty;
         private SearchQuery _query = SearchQuery.Empty;
         private readonly List<Row> _searchResults = new List<Row>();
@@ -79,7 +80,7 @@ namespace F12Overhaul
         private static readonly GUIContent UndoLabel = new GUIContent("Undo");
         private static readonly GUIContent RedoLabel = new GUIContent("Redo");
 
-        public MenuWindow(F12OverhaulPlugin plugin, StockManager stock, SettingsModel model)
+        public MenuWindow(BetterBepInExPlugin plugin, StockManager stock, SettingsModel model)
         {
             _plugin = plugin;
             _stock = stock;
@@ -109,12 +110,32 @@ namespace F12Overhaul
             _editingRow = null;
         }
 
+        /// <summary>
+        /// True while the menu is in the background: clicked off, faded, and letting the game
+        /// have the mouse and keys, as the stock menu did once its window had been moved.
+        /// </summary>
+        public bool Passive { get; private set; }
+
+        /// <summary>The window's current opacity, eased towards its target so fading is not a jump.</summary>
+        private float _alpha = 1f;
+
+        private void EnterBackground()
+        {
+            CommitEdit();
+            CancelCapture();
+            ClosePopup();
+            GUIUtility.keyboardControl = 0;
+            GUI.UnfocusWindow();
+            Passive = true;
+        }
+
         public void OnOpen()
         {
+            Passive = false;
+            _alpha = 1f;
             _focusSearch = true;
             _focusWindow = true;
             _rectLoaded = false;
-            _profileNames = null;
             if (_page != null && !_page.StartsWith("@", StringComparison.Ordinal) && !_model.PagesByGuid.ContainsKey(_page))
             {
                 _page = PageChanged;
@@ -154,15 +175,38 @@ namespace F12Overhaul
             }
 
             Event e = Event.current;
+            bool mouseOver = _rect.Contains(e.mousePosition);
+            if (Passive && e.type == EventType.MouseDown && mouseOver)
+            {
+                // Clicking the faded menu brings it back. The click is not used up, so it also
+                // lands on whatever was under it.
+                Passive = false;
+                _focusWindow = true;
+            }
+            if (e.type == EventType.Repaint)
+            {
+                float target = !Passive ? 1f
+                    : mouseOver ? Mathf.Min(1f, _plugin.BackgroundOpacity.Value + 0.3f)
+                    : _plugin.BackgroundOpacity.Value;
+                _alpha = Mathf.MoveTowards(_alpha, target, Time.unscaledDeltaTime * 6f);
+            }
+
             HandleResize(e);
             HandlePopupOutsideClick(e);
 
-            // The dim and the shadow are a window of their own, sent to the back. Drawn as plain
-            // GUI in this OnGUI they landed on top of the window: IMGUI paints windows first.
-            GUI.Window(BackdropId, new Rect(0, 0, Screen.width, Screen.height), DrawBackdrop, GUIContent.none, GUIStyle.none);
-            GUI.BringWindowToBack(BackdropId);
+            if (!Passive)
+            {
+                // The dim and the shadow are a window of their own, sent to the back. Drawn as
+                // plain GUI in this OnGUI they landed on top of the window: IMGUI paints windows
+                // first. In the background there is neither, so nothing catches clicks meant for
+                // the game.
+                GUI.Window(BackdropId, new Rect(0, 0, Screen.width, Screen.height), DrawBackdrop, GUIContent.none, GUIStyle.none);
+                GUI.BringWindowToBack(BackdropId);
+            }
 
+            GUI.color = new Color(1f, 1f, 1f, _alpha);
             Rect moved = GUI.Window(WindowId, _rect, DrawWindow, GUIContent.none, _skin.Window);
+            GUI.color = Color.white;
             if (moved.position != _rect.position)
             {
                 _rect.position = moved.position;
@@ -175,13 +219,13 @@ namespace F12Overhaul
                 GUI.BringWindowToFront(PopupId);
             }
 
-            if (_focusWindow)
+            if (_focusWindow && !Passive)
             {
                 GUI.FocusWindow(WindowId);
                 _focusWindow = false;
             }
 
-            if (!IsCapturing && !_stock.StockCapturingKey)
+            if (!IsCapturing && !_stock.StockCapturingKey && (!Passive || mouseOver))
             {
                 // What the stock menu does, kept for anything outside the raid player the game
                 // reads through Unity's axes.
@@ -204,10 +248,16 @@ namespace F12Overhaul
             }
             else if (e.type == EventType.MouseDown)
             {
-                // A click outside the menu would focus this window and take keyboard focus from
-                // the menu; hand it straight back.
                 e.Use();
-                _focusWindow = true;
+                if (_plugin.ClickOffToPlay.Value)
+                {
+                    EnterBackground();
+                }
+                else
+                {
+                    // This window would take keyboard focus from the menu; hand it straight back.
+                    _focusWindow = true;
+                }
             }
         }
 
@@ -215,14 +265,14 @@ namespace F12Overhaul
         {
             _model.RecordDepth++;
             GUI.enabled = true;
-            GUI.color = Color.white;
+            GUI.color = new Color(1f, 1f, 1f, _alpha);
             try
             {
                 HandleKeys(Event.current);
 
                 float titleHeight = U(60);
                 float statusHeight = U(30);
-                float sidebarWidth = Mathf.Clamp(U(260), 160f, _rect.width * 0.32f);
+                float sidebarWidth = Mathf.Clamp(U(260), U(170), _rect.width * 0.32f);
 
                 GUILayout.BeginArea(new Rect(0, 0, _rect.width, titleHeight), _skin.TitleBar);
                 DrawTitleBar();
@@ -449,7 +499,6 @@ namespace F12Overhaul
             SidebarItem(PageChanged, "Changed settings", _model.ChangedCount, _skin.Badge);
             int conflicts = _model.ConflictGroups.Count;
             SidebarItem(PageKeybinds, "Keybinds", conflicts > 0 ? conflicts : 0, _skin.BadgeDanger);
-            SidebarItem(PageProfiles, "Profiles", 0, null);
 
             SearchQuery filter = _modFilterQuery;
 
@@ -566,10 +615,6 @@ namespace F12Overhaul
                 _filter = RowFilter.All;
             }
             _page = page;
-            if (page == PageProfiles)
-            {
-                _profileNames = null;
-            }
         }
 
         private GUIContent CountLabel(int count)
@@ -682,19 +727,44 @@ namespace F12Overhaul
 
         // ------------------------------------------------------------------ window geometry
 
+        /// <summary>
+        /// The window's place and size are kept as fractions of the screen, so a window sized at
+        /// 3440x1440 comes back the same shape at 1920x1080 or 4K, and a resolution change while
+        /// the menu is open moves it along with the screen.
+        /// </summary>
         private void EnsureRect()
         {
+            Vector2 screen = new Vector2(Screen.width, Screen.height);
             if (!_rectLoaded)
             {
                 _rectLoaded = true;
-                if (!TryParseRect(_plugin.WindowRect.Value, out _rect))
+                if (TryParseRect(_plugin.WindowRect.Value, out Rect fraction))
                 {
-                    float w = Mathf.Min(Screen.width * 0.72f, U(1320));
-                    float h = Screen.height * 0.84f;
-                    _rect = new Rect((Screen.width - w) / 2f, (Screen.height - h) / 2f, w, h);
+                    _rect = new Rect(fraction.x * screen.x, fraction.y * screen.y, fraction.width * screen.x, fraction.height * screen.y);
                 }
+                else
+                {
+                    _rect = DefaultRect();
+                }
+                _rectScreen = screen;
+            }
+            else if (screen != _rectScreen && _rectScreen.x > 0f && _rectScreen.y > 0f)
+            {
+                float sx = screen.x / _rectScreen.x;
+                float sy = screen.y / _rectScreen.y;
+                _rect = new Rect(_rect.x * sx, _rect.y * sy, _rect.width * sx, _rect.height * sy);
+                _rectScreen = screen;
+                ResetVirtualization();
             }
             ClampRect();
+        }
+
+        /// <summary>Centred, 84% of the screen's height, and as wide as the layout uses at this scale.</summary>
+        private Rect DefaultRect()
+        {
+            float w = Mathf.Min(Screen.width * 0.9f, Mathf.Max(Screen.width * 0.55f, U(1320)));
+            float h = Screen.height * 0.84f;
+            return new Rect((Screen.width - w) / 2f, (Screen.height - h) / 2f, w, h);
         }
 
         private void ClampRect()
@@ -709,10 +779,10 @@ namespace F12Overhaul
 
         private void SaveRect()
         {
-            if (_rectLoaded)
+            if (_rectLoaded && Screen.width > 0 && Screen.height > 0)
             {
-                _plugin.WindowRect.Value = string.Format(CultureInfo.InvariantCulture, "{0:0},{1:0},{2:0},{3:0}",
-                    _rect.x, _rect.y, _rect.width, _rect.height);
+                _plugin.WindowRect.Value = string.Format(CultureInfo.InvariantCulture, "{0:0.####},{1:0.####},{2:0.####},{3:0.####}",
+                    _rect.x / Screen.width, _rect.y / Screen.height, _rect.width / Screen.width, _rect.height / Screen.height);
             }
         }
 
@@ -733,7 +803,8 @@ namespace F12Overhaul
                 }
             }
             rect = new Rect(v[0], v[1], v[2], v[3]);
-            return v[2] > 0 && v[3] > 0;
+            // Fractions of the screen; anything else is not a rect this version saved.
+            return v[2] > 0.05f && v[3] > 0.05f && v[2] <= 1f && v[3] <= 1f && v[0] >= 0f && v[1] >= 0f && v[0] < 1f && v[1] < 1f;
         }
 
         public void ResetWindow()
@@ -814,7 +885,7 @@ namespace F12Overhaul
 
         // ------------------------------------------------------------------ helpers
 
-        private static string Describe(Profiles.Result r, string verb)
+        private static string Describe(SettingsClipboard.Result r, string verb)
         {
             string text = verb + " " + r.Applied + (r.Applied == 1 ? " setting" : " settings");
             if (r.Unknown > 0)
@@ -907,19 +978,6 @@ namespace F12Overhaul
                 return "Mouse " + (int)(key - KeyCode.Mouse0 + 1);
             }
             return DisplayNames.SplitWords(key.ToString());
-        }
-
-        private void OpenFolder(string folder)
-        {
-            try
-            {
-                System.IO.Directory.CreateDirectory(folder);
-                Application.OpenURL("file:///" + folder.Replace('\\', '/'));
-            }
-            catch (Exception e)
-            {
-                SetStatus("Could not open " + folder + ": " + e.Message, true);
-            }
         }
 
         private static string Plural(int n, string one, string many) => n == 1 ? one : many;

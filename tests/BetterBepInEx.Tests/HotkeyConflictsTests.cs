@@ -1,6 +1,6 @@
-using F12Overhaul.Core;
+using BetterBepInEx.Core;
 
-namespace F12Overhaul.Tests;
+namespace BetterBepInEx.Tests;
 
 public class HotkeyConflictsTests
 {

@@ -1,6 +1,6 @@
 using System;
 
-namespace F12Overhaul.Core
+namespace BetterBepInEx.Core
 {
     /// <summary>
     /// Mod names as the sidebar shows and sorts them. BepInEx plugin names are whatever the author

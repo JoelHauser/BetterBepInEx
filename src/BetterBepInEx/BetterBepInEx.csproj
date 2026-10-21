@@ -1,15 +1,15 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <!-- net472 because that is what the game's mono runtime loads. -->
     <TargetFramework>net472</TargetFramework>
-    <RootNamespace>F12Overhaul</RootNamespace>
-    <AssemblyName>F12Overhaul</AssemblyName>
+    <RootNamespace>BetterBepInEx</RootNamespace>
+    <AssemblyName>BetterBepInEx</AssemblyName>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
 
-    <!-- Must match F12OverhaulPlugin.PluginVersion. -->
-    <Version>0.2.0</Version>
+    <!-- Must match BetterBepInExPlugin.PluginVersion. -->
+    <Version>0.3.0</Version>
 
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

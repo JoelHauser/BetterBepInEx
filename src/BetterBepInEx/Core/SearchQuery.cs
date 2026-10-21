@@ -1,6 +1,6 @@
 using System;
 
-namespace F12Overhaul.Core
+namespace BetterBepInEx.Core
 {
     /// <summary>
     /// The search box. Every word typed has to appear somewhere in a setting's text (its mod name,

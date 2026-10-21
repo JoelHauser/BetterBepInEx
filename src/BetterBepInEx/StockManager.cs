@@ -10,7 +10,7 @@ using HarmonyLib;
 using UnityEngine;
 using StockCM = ConfigurationManager.ConfigurationManager;
 
-namespace F12Overhaul
+namespace BetterBepInEx
 {
     /// <summary>
     /// Everything this mod needs from the stock Configuration Manager that SPT ships (BepInEx

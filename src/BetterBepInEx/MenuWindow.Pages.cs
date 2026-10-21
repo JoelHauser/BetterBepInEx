@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using F12Overhaul.Core;
+using BetterBepInEx.Core;
 using UnityEngine;
 
-namespace F12Overhaul
+namespace BetterBepInEx
 {
     /// <summary>The filter chips above a list of settings.</summary>
     internal enum RowFilter
@@ -31,10 +31,6 @@ namespace F12Overhaul
         private RowFilter _filter = RowFilter.All;
         private readonly int[] _filterCounts = new int[8];
 
-        private List<string> _profileNames;
-        private readonly Dictionary<string, GUIContent> _profileSaved = new Dictionary<string, GUIContent>(StringComparer.OrdinalIgnoreCase);
-        private string _newProfileName = string.Empty;
-
         /// <summary>Reused for each group's rows after filtering, so filtering allocates nothing.</summary>
         private readonly List<Row> _groupRows = new List<Row>();
         private readonly HashSet<Row> _shownInConflicts = new HashSet<Row>();
@@ -55,9 +51,6 @@ namespace F12Overhaul
                     return;
                 case PageKeybinds:
                     DrawKeybinds();
-                    return;
-                case PageProfiles:
-                    DrawProfiles();
                     return;
             }
             if (_page != null && _model.PagesByGuid.TryGetValue(_page, out Page page))
@@ -103,8 +96,13 @@ namespace F12Overhaul
         {
             Array.Clear(_filterCounts, 0, _filterCounts.Length);
             bool showAdvanced = ShowAdvanced;
+            int advancedCount = 0;
             foreach (Row row in rows)
             {
+                if (row.IsAdvanced)
+                {
+                    advancedCount++;
+                }
                 if (row.IsAdvanced && !showAdvanced)
                 {
                     continue;
@@ -133,11 +131,20 @@ namespace F12Overhaul
                 }
             }
             GUILayout.FlexibleSpace();
-            bool advanced = _plugin.ShowAdvanced.Value;
-            if (GUILayout.Button(advanced ? "Advanced shown" : "Advanced hidden", advanced ? _skin.ChipOn : _skin.Chip, GUILayout.ExpandWidth(false)))
+            // Only settings their mod marks as advanced are hidden, and most mods mark none, so
+            // the toggle is only offered where it would change something, with how much. Search
+            // always shows advanced settings, so it is not offered there either.
+            if (advancedCount > 0 && _query.IsEmpty)
             {
-                _plugin.ShowAdvanced.Value = !advanced;
-                _model.MarkCountsDirty();
+                bool advanced = _plugin.ShowAdvanced.Value;
+                GUIContent label = advanced
+                    ? CountedLabel("Hide advanced  ", advancedCount, 20)
+                    : CountedLabel("Show advanced  ", advancedCount, 21);
+                if (GUILayout.Button(label, advanced ? _skin.ChipOn : _skin.Chip, GUILayout.ExpandWidth(false)))
+                {
+                    _plugin.ShowAdvanced.Value = !advanced;
+                    _model.MarkCountsDirty();
+                }
             }
             GUILayout.EndHorizontal();
             GUILayout.Space(U(6));
@@ -191,7 +198,7 @@ namespace F12Overhaul
             {
                 EmptyNote(page.Rows.Count == 0 ? "This mod has no settings."
                     : _filter != RowFilter.All ? "Nothing here matches the filter."
-                    : "Every setting this mod has is marked advanced. Click \"Advanced hidden\" above to show them.");
+                    : "Every setting this mod has is marked advanced. Click \"Show advanced\" above to see them.");
             }
             EndList(page.Guid);
         }
@@ -222,6 +229,10 @@ namespace F12Overhaul
             Header(Cached("Changed settings"), Cached("Every setting that is not at its default, across all mods."));
             GUILayout.EndVertical();
             GUILayout.FlexibleSpace();
+            if (GUILayout.Button(new GUIContent("Paste", "Apply settings copied from this menu, for every mod they cover"), _skin.Ghost, GUILayout.ExpandWidth(false)))
+            {
+                Paste(null);
+            }
             GUI.enabled = _model.ChangedCount > 0;
             if (GUILayout.Button(Cached("Copy"), _skin.Ghost, GUILayout.ExpandWidth(false)))
             {
@@ -485,158 +496,10 @@ namespace F12Overhaul
             }
         }
 
-        // ------------------------------------------------------------------ profiles
-
-        private void DrawProfiles()
-        {
-            if (_profileNames == null)
-            {
-                // Listed once per visit, not per event: OnGUI runs several times a frame.
-                _profileNames = _profiles.List();
-                _profileSaved.Clear();
-                foreach (string n in _profileNames)
-                {
-                    DateTime? modified = _profiles.Modified(n);
-                    _profileSaved[n] = new GUIContent(modified.HasValue ? "Saved " + modified.Value.ToString("yyyy-MM-dd HH:mm") : string.Empty);
-                }
-            }
-
-            Header(Cached("Profiles"), Cached("Save every mod's settings under a name and switch between them. Loading a profile is one step of undo."));
-            GUILayout.Space(U(6));
-
-            _scroll.TryGetValue(PageProfiles, out Vector2 pos);
-            pos = GUILayout.BeginScrollView(pos, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, GUIStyle.none);
-            GUILayout.BeginVertical(GUILayout.Width(_rowWidth));
-
-            GUILayout.Label("SAVE CURRENT SETTINGS", _skin.SectionHeader);
-            GUILayout.BeginHorizontal(_skin.CardSingle);
-            GUILayout.BeginVertical();
-            GUILayout.Label("New profile", _skin.Label);
-            GUILayout.Label("Saves every mod's current settings under this name.", _skin.Description);
-            GUILayout.EndVertical();
-            GUILayout.Space(U(20));
-            GUILayout.BeginHorizontal(GUILayout.Width(_valueWidth));
-            _newProfileName = GUILayout.TextField(_newProfileName, _skin.TextField, GUILayout.ExpandWidth(true));
-            string safe = ProfileFormat.SafeFileName(_newProfileName);
-            GUI.enabled = safe != null;
-            bool exists = safe != null && _profileSaved.ContainsKey(safe);
-            bool save = exists
-                ? Confirm("save:" + safe, "Save", "Overwrite?", _skin.ButtonAccent, GUILayout.ExpandWidth(false))
-                : GUILayout.Button("Save", _skin.ButtonAccent, GUILayout.ExpandWidth(false));
-            GUI.enabled = true;
-            GUILayout.EndHorizontal();
-            GUILayout.EndHorizontal();
-            if (save)
-            {
-                SaveProfile(_newProfileName);
-                _newProfileName = string.Empty;
-            }
-
-            GUILayout.Label("SAVED", _skin.SectionHeader);
-            if (_profileNames.Count == 0)
-            {
-                GUILayout.Label("No profiles yet.", _skin.Muted);
-            }
-            for (int i = 0; i < _profileNames.Count; i++)
-            {
-                string name = _profileNames[i];
-                GUILayout.BeginHorizontal(CardStyle(i == 0, i == _profileNames.Count - 1));
-                GUILayout.BeginVertical();
-                GUILayout.Label(name, _skin.Label);
-                if (_profileSaved.TryGetValue(name, out GUIContent saved))
-                {
-                    GUILayout.Label(saved, _skin.Description);
-                }
-                GUILayout.EndVertical();
-                GUILayout.FlexibleSpace();
-                if (GUILayout.Button("Load", _skin.ButtonAccent, GUILayout.ExpandWidth(false)))
-                {
-                    LoadProfile(name);
-                }
-                if (Confirm("over:" + name, "Overwrite", "Overwrite?", _skin.Ghost, GUILayout.ExpandWidth(false)))
-                {
-                    SaveProfile(name);
-                }
-                if (Confirm("del:" + name, "Delete", "Delete?", _skin.GhostDanger, GUILayout.ExpandWidth(false)))
-                {
-                    try
-                    {
-                        _profiles.Delete(name);
-                        SetStatus("Deleted profile \"" + name + "\".");
-                    }
-                    catch (Exception e)
-                    {
-                        SetStatus("Could not delete \"" + name + "\": " + e.Message, true);
-                    }
-                    _profileNames = null;
-                }
-                GUILayout.EndHorizontal();
-                if (_profileNames == null)
-                {
-                    break;
-                }
-            }
-
-            GUILayout.Label("SHARE", _skin.SectionHeader);
-            GUILayout.BeginVertical(_skin.CardSingle);
-            GUILayout.Label("Copy puts every mod's settings on the clipboard as text, to paste into chat or another install. "
-                            + "Paste applies settings copied from here or from a mod page; settings for mods you do not have are skipped.", _skin.Description);
-            GUILayout.Space(U(6));
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Copy all settings", _skin.Button, GUILayout.ExpandWidth(false)))
-            {
-                CopyRows(_model.AllRows, "every mod");
-            }
-            if (GUILayout.Button("Paste settings", _skin.Button, GUILayout.ExpandWidth(false)))
-            {
-                Paste(null);
-            }
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("Open profiles folder", _skin.Ghost, GUILayout.ExpandWidth(false)))
-            {
-                OpenFolder(_profiles.Folder);
-            }
-            GUILayout.EndHorizontal();
-            GUILayout.EndVertical();
-
-            GUILayout.Space(U(32));
-            GUILayout.EndVertical();
-            GUILayout.EndScrollView();
-            _scroll[PageProfiles] = pos;
-        }
-
-        private void SaveProfile(string name)
-        {
-            try
-            {
-                _profiles.Save(name, _model);
-                SetStatus("Saved profile \"" + ProfileFormat.SafeFileName(name) + "\".");
-            }
-            catch (Exception e)
-            {
-                SetStatus("Could not save \"" + name + "\": " + e.Message, true);
-            }
-            _profileNames = null;
-        }
-
-        private void LoadProfile(string name)
-        {
-            CommitEdit();
-            try
-            {
-                Profiles.Result r = Profiles.Apply(_profiles.Read(name), _model, "loading \"" + name + "\"");
-                SetStatus(Describe(r, "Loaded \"" + name + "\": changed"));
-            }
-            catch (Exception e)
-            {
-                SetStatus("Could not load \"" + name + "\": " + e.Message, true);
-            }
-        }
-
         private void CopyRows(IEnumerable<Row> rows, string what)
         {
-            List<ProfileFormat.Record> records = new List<ProfileFormat.Record>(Profiles.Records(rows));
-            GUIUtility.systemCopyBuffer = ProfileFormat.Write(records, "Copied from " + what + ", " + DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
+            List<SettingsText.Record> records = new List<SettingsText.Record>(SettingsClipboard.Records(rows));
+            GUIUtility.systemCopyBuffer = SettingsText.Write(records, "Copied from " + what + ", " + DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
             SetStatus("Copied " + records.Count + Plural(records.Count, " setting", " settings") + " to the clipboard.");
         }
 
@@ -644,15 +507,15 @@ namespace F12Overhaul
         {
             CommitEdit();
             string text = GUIUtility.systemCopyBuffer;
-            if (!ProfileFormat.LooksLikeSettings(text))
+            if (!SettingsText.LooksLikeSettings(text))
             {
                 SetStatus("The clipboard does not hold settings copied from this menu.", true);
                 return;
             }
-            Profiles.Result r = Profiles.Apply(text, _model, onlyPage == null ? "pasting settings" : "pasting into " + onlyPage.DisplayName, onlyPage);
+            SettingsClipboard.Result r = SettingsClipboard.Apply(text, _model, onlyPage == null ? "pasting settings" : "pasting into " + onlyPage.DisplayName, onlyPage);
             if (onlyPage != null && r.Applied == 0 && r.Unchanged == 0 && r.Unknown > 0)
             {
-                SetStatus("The clipboard holds settings for other mods, not " + onlyPage.DisplayName + ". Paste on the Profiles page applies them all.", true);
+                SetStatus("The clipboard holds settings for other mods, not " + onlyPage.DisplayName + ". Paste on the Changed settings page applies them all.", true);
                 return;
             }
             SetStatus(Describe(r, "Pasted: changed"));
@@ -766,7 +629,7 @@ namespace F12Overhaul
                 catch (Exception e) when (!(e is ArgumentException))
                 {
                     _failedRows.Add(row);
-                    F12OverhaulPlugin.Log.LogError("Failed to draw " + row.Page.DisplayName + " / " + row.Name.text + ": " + e);
+                    BetterBepInExPlugin.Log.LogError("Failed to draw " + row.Page.DisplayName + " / " + row.Name.text + ": " + e);
                 }
             }
             GUI.enabled = enabled;

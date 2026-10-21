@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -10,12 +10,12 @@ using HarmonyLib;
 using UnityEngine;
 using StockCM = ConfigurationManager.ConfigurationManager;
 
-namespace F12Overhaul
+namespace BetterBepInEx
 {
     /// <summary>
     /// Replaces the window of the F12 menu (BepInEx Configuration Manager, as SPT ships it) with
     /// a larger one: a sidebar of mods, search across every setting, changed-from-default markers,
-    /// undo, a keybind page that shows collisions, and saved profiles.
+    /// undo, and a keybind page that shows collisions.
     ///
     /// The stock plugin keeps running underneath. Its hotkey still opens the menu, its cursor
     /// handling still applies, and its setting list (with every mod's attributes already read) is
@@ -24,22 +24,24 @@ namespace F12Overhaul
     /// </summary>
     [BepInPlugin(PluginGuid, PluginName, PluginVersion)]
     [BepInDependency(StockCM.GUID)]
-    public class F12OverhaulPlugin : BaseUnityPlugin
+    public class BetterBepInExPlugin : BaseUnityPlugin
     {
-        public const string PluginGuid = "com.mybutthasarash.f12overhaul";
-        public const string PluginName = "F12 Overhaul";
+        public const string PluginGuid = "com.mybutthasarash.betterbepinex";
+        public const string PluginName = "BetterBepInEx";
 
         /// <summary>Must match the csproj's Version. Two places, and they have to agree.</summary>
-        public const string PluginVersion = "0.2.0";
+        public const string PluginVersion = "0.3.0";
 
         private const string GameFontHint = "Bender";
 
         internal static ManualLogSource Log;
-        internal static F12OverhaulPlugin Instance;
+        internal static BetterBepInExPlugin Instance;
 
         internal ConfigEntry<bool> UseNewMenu;
         internal ConfigEntry<bool> HoldPlayer;
         internal ConfigEntry<bool> DimBackground;
+        internal ConfigEntry<bool> ClickOffToPlay;
+        internal ConfigEntry<float> BackgroundOpacity;
         internal ConfigEntry<bool> ShowDescriptions;
         internal ConfigEntry<bool> ShowAdvanced;
         internal ConfigEntry<float> MenuScale;
@@ -76,6 +78,13 @@ namespace F12Overhaul
             HoldPlayer = Config.Bind("General", "Hold the player still while open", true,
                 "In raid, stop the player moving and the camera turning while the menu is open, "
                 + "the way the inventory does. The stock menu lets both through.");
+            ClickOffToPlay = Config.Bind("General", "Click outside to keep playing", true,
+                "Clicking outside the menu fades it and gives the game your mouse and keys back, so you "
+                + "can move around with it open. Click the menu to use it again; F12 still closes it. "
+                + "Off keeps the menu in front until you close it.");
+            BackgroundOpacity = Config.Bind("Look", "Opacity in the background", 0.45f, new ConfigDescription(
+                "How see-through the menu is after clicking outside it. 1 is solid.",
+                new AcceptableValueRange<float>(0.1f, 1f)));
             DimBackground = Config.Bind("General", "Dim the game behind the menu", true,
                 "Darken the screen behind the menu.");
             ShowDescriptions = Config.Bind("General", "Show descriptions under settings", true,
@@ -86,8 +95,9 @@ namespace F12Overhaul
             MenuScale = Config.Bind("Look", "Menu scale", 1f, new ConfigDescription(
                 "Size of the menu text and controls. 1 is the normal size for your screen.",
                 new AcceptableValueRange<float>(0.6f, 2f)));
-            ScaleWithScreen = Config.Bind("Look", "Scale with screen height", true,
-                "Grow the menu with the screen, so it is as readable at 1440p and 4K as at 1080p.");
+            ScaleWithScreen = Config.Bind("Look", "Scale with screen resolution", true,
+                "Size the menu for your resolution, so it reads the same at 1080p, 1440p, ultrawide and 4K. "
+                + "Off draws it at 1080p size on any screen.");
             UseGameFont = Config.Bind("Look", "Use the game font", false,
                 "Draw the menu in EFT's own font, if the game has it loaded. If the menu text disappears, "
                 + "set this back to false in BepInEx\\config\\" + PluginGuid + ".cfg.");
@@ -113,7 +123,7 @@ namespace F12Overhaul
             };
 
             // Kept between sessions; the "Hidden" tag keeps them off the menu's own page.
-            WindowRect = Config.Bind("Window", "Rect", string.Empty, new ConfigDescription("Window position and size.", null, "Hidden"));
+            WindowRect = Config.Bind("Window", "Rect", string.Empty, new ConfigDescription("Window position and size, as fractions of the screen.", null, "Hidden"));
             Favorites = Config.Bind("Window", "Favorites", string.Empty, new ConfigDescription("GUIDs of favourite mods.", null, "Hidden"));
             LastPage = Config.Bind("Window", "Last page", string.Empty, new ConfigDescription("The page open when the menu closed.", null, "Hidden"));
 
@@ -131,9 +141,9 @@ namespace F12Overhaul
             try
             {
                 _harmony.Patch(AccessTools.Method(typeof(StockCM), "OnGUI"),
-                    prefix: new HarmonyMethod(typeof(F12OverhaulPlugin), nameof(SkipStockWindow)) { priority = Priority.First });
+                    prefix: new HarmonyMethod(typeof(BetterBepInExPlugin), nameof(SkipStockWindow)) { priority = Priority.First });
                 _harmony.Patch(AccessTools.Method(typeof(StockCM), nameof(StockCM.BuildSettingList)),
-                    prefix: new HarmonyMethod(typeof(F12OverhaulPlugin), nameof(InsteadOfStockBuild)));
+                    prefix: new HarmonyMethod(typeof(BetterBepInExPlugin), nameof(InsteadOfStockBuild)));
             }
             catch (Exception e)
             {
@@ -264,7 +274,7 @@ namespace F12Overhaul
             {
                 return;
             }
-            if (HoldPlayer.Value)
+            if (HoldPlayer.Value && !_menu.Passive)
             {
                 _blocker.Hold();
             }
@@ -285,12 +295,7 @@ namespace F12Overhaul
 
         internal float EffectiveScale()
         {
-            float scale = MenuScale.Value;
-            if (ScaleWithScreen.Value)
-            {
-                scale *= Mathf.Max(0.5f, Screen.height / 1080f);
-            }
-            return Mathf.Clamp(scale, 0.5f, 4f);
+            return Core.ScreenScale.Effective(Screen.width, Screen.height, MenuScale.Value, ScaleWithScreen.Value);
         }
 
         /// <summary>

@@ -4,7 +4,7 @@ using System.Reflection.Emit;
 using BepInEx.Logging;
 using HarmonyLib;
 
-namespace F12Overhaul
+namespace BetterBepInEx
 {
     /// <summary>
     /// Keeps the raid player still while the menu is open. The stock menu only calls

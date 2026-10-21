@@ -24,11 +24,11 @@
 
   <!--
     Linked rather than project referenced. The plugin targets net472 against BepInEx and Unity,
-    which a test host cannot load, so the pure half (src\F12Overhaul\Core, which must stay free of
+    which a test host cannot load, so the pure half (src\BetterBepInEx\Core, which must stay free of
     Unity and BepInEx) is compiled into the test assembly directly.
   -->
   <ItemGroup>
-    <Compile Include="..\..\src\F12Overhaul\Core\*.cs" Link="Core\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\BetterBepInEx\Core\*.cs" Link="Core\%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

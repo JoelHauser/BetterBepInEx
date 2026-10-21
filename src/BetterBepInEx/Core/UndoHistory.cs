@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
 
-namespace F12Overhaul.Core
+namespace BetterBepInEx.Core
 {
     /// <summary>
     /// Undo and redo for setting changes made through the menu. No game or Unity dependency, so the
     /// tests compile it directly.
     ///
-    /// A step is one or more changes that undo together. Loading a profile or resetting a mod is one
+    /// A step is one or more changes that undo together. Pasting settings or resetting a mod is one
     /// group step. Dragging a slider fires a change on every frame, so a change to the same key
     /// within <see cref="MergeWindowSeconds"/> of the last one extends that step instead of adding a
     /// new one; otherwise one drag would take fifty presses of Ctrl+Z to walk back.

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace F12Overhaul
+namespace BetterBepInEx
 {
     /// <summary>
     /// The menu's IMGUI skin. Built in code: rounded-rect, circle, shadow and icon textures drawn
@@ -82,7 +82,7 @@ namespace F12Overhaul
             WhiteTex = Solid(Color.white);
             KnobTex = Circle(Color.white, 16);
             SearchIcon = Magnifier(32);
-            ShadowBorder = 30;
+            ShadowBorder = R(30);
             ShadowTex = Shadow(ShadowBorder);
 
             Texture2D hover = Rounded(Hover, 6, null);
@@ -232,7 +232,7 @@ namespace F12Overhaul
             SearchField.normal.background = Rounded(Hex(0x0F1114), 15, InputBorder);
             SearchField.hover.background = Rounded(Hex(0x0F1114), 15, Hex(0x3A4048));
             SearchField.focused.background = Rounded(Hex(0x0F1114), 15, Accent);
-            SearchField.border = new RectOffset(16, 16, 16, 16);
+            SearchField.border = new RectOffset(R(15) + 1, R(15) + 1, R(15) + 1, R(15) + 1);
             SearchField.fontSize = FontSize(14);
             SearchField.fixedHeight = U(34);
             SearchField.padding = Offset(U(38), U(14), U(7), U(7));
@@ -254,7 +254,7 @@ namespace F12Overhaul
             KeyFieldActive.hover.background = KeyFieldActive.normal.background;
             KeyFieldActive.normal.textColor = Accent;
             KeyFieldActive.hover.textColor = Accent;
-            Keycap = Make(TextStyle(12, TextColor, FontStyle.Bold), Keycap3D(), 5);
+            Keycap = Make(TextStyle(12, TextColor, FontStyle.Bold), Keycap3D(), 4);
             Keycap.alignment = TextAnchor.MiddleCenter;
             Keycap.padding = Offset(U(8), U(8), U(2), U(4));
             Keycap.fixedHeight = U(24);
@@ -364,8 +364,9 @@ namespace F12Overhaul
         /// <summary>Draws a texture tinted, restoring GUI.color after.</summary>
         public void Fill(Rect r, Color color, Texture2D tex = null)
         {
+            // Multiplied by the current alpha, so fills fade with the rest of the window.
             Color old = GUI.color;
-            GUI.color = color;
+            GUI.color = new Color(color.r, color.g, color.b, color.a * old.a);
             GUI.DrawTexture(r, tex ?? WhiteTex);
             GUI.color = old;
         }
@@ -377,6 +378,13 @@ namespace F12Overhaul
             s.margin = Offset(0);
             return s;
         }
+
+        /// <summary>
+        /// A corner radius (or texture size) in pixels at the current scale. Textures are drawn
+        /// at the size they are shown, so corners stay as round and edges as sharp at 4K as at
+        /// 1080p; the nine-slice borders use the same value, so they always match the texture.
+        /// </summary>
+        private int R(int basePx) => Mathf.Max(1, Mathf.RoundToInt(basePx * Scale));
 
         private int FontSize(int basePx) => Mathf.Max(8, Mathf.RoundToInt(basePx * Scale));
 
@@ -410,7 +418,7 @@ namespace F12Overhaul
             // style's one border, and a rounded hover texture without it stretches its corners.
             if (radius > 0)
             {
-                int b = radius + 1;
+                int b = R(radius) + 1;
                 s.border = new RectOffset(b, b, b, b);
             }
             return s;
@@ -449,6 +457,7 @@ namespace F12Overhaul
         /// </summary>
         private Texture2D Rounded(Color fill, int radius, Color? outline)
         {
+            radius = R(radius);
             int size = radius * 2 + 4;
             Texture2D t = NewTexture(size, size);
             Color[] pixels = new Color[size * size];
@@ -479,6 +488,7 @@ namespace F12Overhaul
         /// </summary>
         private Texture2D RoundedPart(Color fill, int radius, Color outline, bool roundTop, bool roundBottom)
         {
+            radius = R(radius);
             int size = radius * 2 + 4;
             Texture2D t = NewTexture(size, size);
             Color[] pixels = new Color[size * size];
@@ -509,7 +519,7 @@ namespace F12Overhaul
         /// <summary>A keycap: rounded, with a darker lip along the bottom edge.</summary>
         private Texture2D Keycap3D()
         {
-            const int radius = 4;
+            int radius = R(4);
             int size = radius * 2 + 4;
             Texture2D t = NewTexture(size, size);
             Color[] pixels = new Color[size * size];
@@ -532,6 +542,7 @@ namespace F12Overhaul
 
         private Texture2D Circle(Color fill, int diameter)
         {
+            diameter = R(diameter);
             int size = diameter + 2;
             Texture2D t = NewTexture(size, size);
             Color[] pixels = new Color[size * size];

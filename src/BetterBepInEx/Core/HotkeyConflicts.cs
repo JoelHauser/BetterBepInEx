@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace F12Overhaul.Core
+namespace BetterBepInEx.Core
 {
     /// <summary>
     /// Finds keybinds that two or more settings share. Works on plain key codes (Unity's KeyCode as

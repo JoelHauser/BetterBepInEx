@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds F12 Overhaul, runs the tests, checks the output's references, and zips it.
+    Builds BetterBepInEx, runs the tests, checks the output's references, and zips it.
 
 .DESCRIPTION
     Run this through PowerShell, not Bash; Bash mangles 'H:\SPT4.1.X' into 'H:SPT4.1.X'.
@@ -23,8 +23,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$plugin = Join-Path $root 'src\F12Overhaul\F12Overhaul.csproj'
-$tests = Join-Path $root 'tests\F12Overhaul.Tests\F12Overhaul.Tests.csproj'
+$plugin = Join-Path $root 'src\BetterBepInEx\BetterBepInEx.csproj'
+$tests = Join-Path $root 'tests\BetterBepInEx.Tests\BetterBepInEx.Tests.csproj'
 
 if (-not (Test-Path (Join-Path $SPTPath 'BepInEx\core\BepInEx.dll'))) {
     throw "SPTPath '$SPTPath' is not an SPT install root: no BepInEx\core\BepInEx.dll."
@@ -32,11 +32,11 @@ if (-not (Test-Path (Join-Path $SPTPath 'BepInEx\core\BepInEx.dll'))) {
 
 # ---------------------------------------------------------------- version agreement
 $csprojVersion = ([xml](Get-Content $plugin)).Project.PropertyGroup.Version | Where-Object { $_ }
-$sourceVersion = (Select-String -Path (Join-Path $root 'src\F12Overhaul\F12OverhaulPlugin.cs') `
+$sourceVersion = (Select-String -Path (Join-Path $root 'src\BetterBepInEx\BetterBepInExPlugin.cs') `
         -Pattern 'PluginVersion\s*=\s*"([^"]+)"').Matches[0].Groups[1].Value
 
 if ($csprojVersion -ne $sourceVersion) {
-    throw "Version mismatch: csproj says '$csprojVersion', F12OverhaulPlugin.PluginVersion says '$sourceVersion'."
+    throw "Version mismatch: csproj says '$csprojVersion', BetterBepInExPlugin.PluginVersion says '$sourceVersion'."
 }
 Write-Host "Version $csprojVersion" -ForegroundColor Cyan
 
@@ -52,7 +52,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
 # ---------------------------------------------------------------- reference check
 # Assembly-CSharp in Managed is not what the game runs (the Launcher's delta renames types), so
 # the plugin must not reference it; the one game member it uses is found by name at runtime.
-$built = Join-Path $root 'src\F12Overhaul\bin\Release\F12Overhaul.dll'
+$built = Join-Path $root 'src\BetterBepInEx\bin\Release\BetterBepInEx.dll'
 $cecil = Join-Path $SPTPath 'SPT_Runtime\Mono.Cecil.dll'
 
 if (Test-Path $cecil) {
@@ -80,7 +80,7 @@ Copy-Item $built $pluginDir
 
 # Unpacked over the SPT root, so the layout inside has to be exactly the install's layout. Only
 # what the mod needs at runtime goes in; no README or other docs.
-$expected = @('BepInEx\plugins\F12Overhaul.dll')
+$expected = @('BepInEx\plugins\BetterBepInEx.dll')
 $actual = Get-ChildItem $staging -Recurse -File |
     ForEach-Object { $_.FullName.Substring($staging.Length + 1) } | Sort-Object
 $diff = Compare-Object ($expected | Sort-Object) $actual
@@ -88,7 +88,7 @@ if ($diff) {
     throw "Staged layout is wrong:`n$($diff | Format-Table -AutoSize | Out-String)"
 }
 
-$zip = Join-Path $root "releases\F12Overhaul_V$csprojVersion.zip"
+$zip = Join-Path $root "releases\BetterBepInEx_V$csprojVersion.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $zip
 Remove-Item $staging -Recurse -Force

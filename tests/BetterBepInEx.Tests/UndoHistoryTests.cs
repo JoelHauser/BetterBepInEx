@@ -1,6 +1,6 @@
-using F12Overhaul.Core;
+using BetterBepInEx.Core;
 
-namespace F12Overhaul.Tests;
+namespace BetterBepInEx.Tests;
 
 public class UndoHistoryTests
 {
@@ -79,7 +79,7 @@ public class UndoHistoryTests
     public void AGroupUndoesTogetherNewestFirst()
     {
         var h = new UndoHistory<Key>();
-        h.BeginGroup("profile");
+        h.BeginGroup("paste");
         h.Record(A, 1, 2, 0, "a");
         h.Record(B, "x", "y", 0, "b");
         h.Record(A, 2, 3, 0, "a");
@@ -87,7 +87,7 @@ public class UndoHistoryTests
 
         Assert.Equal(1, h.UndoCount);
         var undo = h.Undo(out string label)!;
-        Assert.Equal("profile", label);
+        Assert.Equal("paste", label);
         Assert.Equal(2, undo.Count);
         Assert.Equal(B, undo[0].Key);
         Assert.Equal("x", undo[0].Value);
@@ -99,7 +99,7 @@ public class UndoHistoryTests
     public void AGroupThatChangedNothingAddsNoStep()
     {
         var h = new UndoHistory<Key>();
-        h.BeginGroup("profile");
+        h.BeginGroup("paste");
         h.Record(A, 1, 2, 0, "a");
         h.Record(A, 2, 1, 0, "a");
         h.EndGroup();
@@ -129,7 +129,7 @@ public class UndoHistoryTests
     public void AStepAfterAGroupIsNotMergedIntoIt()
     {
         var h = new UndoHistory<Key>();
-        h.BeginGroup("profile");
+        h.BeginGroup("paste");
         h.Record(A, 1, 2, 0, "a");
         h.EndGroup();
         h.Record(A, 2, 3, 0.1, "a");

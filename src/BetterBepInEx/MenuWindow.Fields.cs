@@ -6,7 +6,7 @@ using BepInEx;
 using BepInEx.Configuration;
 using UnityEngine;
 
-namespace F12Overhaul
+namespace BetterBepInEx
 {
     internal sealed partial class MenuWindow
     {
@@ -130,7 +130,7 @@ namespace F12Overhaul
             if (t > 0f)
             {
                 Color old = GUI.color;
-                GUI.color = new Color(1f, 1f, 1f, t * (GUI.enabled ? 1f : 0.4f));
+                GUI.color = new Color(1f, 1f, 1f, t * (GUI.enabled ? 1f : 0.4f) * old.a);
                 _skin.TrackOn.Draw(r, false, false, false, false);
                 GUI.color = old;
             }
@@ -174,7 +174,7 @@ namespace F12Overhaul
                     Color old = GUI.color;
                     if (!GUI.enabled)
                     {
-                        GUI.color = new Color(1f, 1f, 1f, 0.4f);
+                        GUI.color = new Color(1f, 1f, 1f, 0.4f * old.a);
                     }
                     _skin.SliderFill.Draw(new Rect(track.x, track.y, Mathf.Max(trackHeight, width * frac), trackHeight), false, false, false, false);
                     GUI.color = old;

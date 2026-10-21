@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace F12Overhaul.Tests;
+namespace BetterBepInEx.Tests;
 
 /// <summary>
 /// BepInEx throws on these characters in a section or key name, and the throw happens inside the
@@ -19,10 +19,10 @@ public class ConfigKeyTests
     private static string SourceRoot()
     {
         string? dir = AppContext.BaseDirectory;
-        while (dir != null && !Directory.Exists(Path.Combine(dir, "src", "F12Overhaul")))
+        while (dir != null && !Directory.Exists(Path.Combine(dir, "src", "BetterBepInEx")))
             dir = Path.GetDirectoryName(dir);
         Assert.NotNull(dir);
-        return Path.Combine(dir!, "src", "F12Overhaul");
+        return Path.Combine(dir!, "src", "BetterBepInEx");
     }
 
     public static IEnumerable<object[]> Keys()

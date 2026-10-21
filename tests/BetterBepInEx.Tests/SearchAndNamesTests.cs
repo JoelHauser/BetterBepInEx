@@ -1,6 +1,6 @@
-using F12Overhaul.Core;
+using BetterBepInEx.Core;
 
-namespace F12Overhaul.Tests;
+namespace BetterBepInEx.Tests;
 
 public class SearchAndNamesTests
 {
@@ -100,5 +100,37 @@ public class PrettyNameTests
     public void SplitWordsSpacesCamelCase(string input, string expected)
     {
         Assert.Equal(expected, DisplayNames.SplitWords(input));
+    }
+}
+
+public class ScreenScaleTests
+{
+    [Theory]
+    [InlineData(1920, 1080, 1.0f)]
+    [InlineData(2560, 1440, 1.3333f)]
+    [InlineData(3440, 1440, 1.3333f)]   // 21:9 is a wider 1440p, not a bigger one
+    [InlineData(5120, 1440, 1.3333f)]   // 32:9 likewise
+    [InlineData(3840, 2160, 2.0f)]
+    [InlineData(1920, 1200, 1.0f)]      // 16:10: width decides, so it still fits across
+    [InlineData(1280, 1024, 0.6667f)]   // 5:4
+    [InlineData(1280, 720, 0.6667f)]
+    [InlineData(800, 600, 0.5f)]        // floored, so text stays readable
+    public void ScalesWithHeightUnlessTheScreenIsNarrow(int w, int h, float expected)
+    {
+        Assert.Equal(expected, BetterBepInEx.Core.ScreenScale.For(w, h), 3);
+    }
+
+    [Fact]
+    public void TheUserScaleMultipliesAndIsClamped()
+    {
+        Assert.Equal(2.0f, BetterBepInEx.Core.ScreenScale.Effective(2560, 1440, 1.5f, true), 3);
+        Assert.Equal(1.5f, BetterBepInEx.Core.ScreenScale.Effective(2560, 1440, 1.5f, false), 3);
+        Assert.Equal(4.0f, BetterBepInEx.Core.ScreenScale.Effective(7680, 4320, 2f, true), 3);
+    }
+
+    [Fact]
+    public void ABadScreenSizeDoesNotScale()
+    {
+        Assert.Equal(1f, BetterBepInEx.Core.ScreenScale.For(0, 0));
     }
 }
