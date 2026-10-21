@@ -253,10 +253,13 @@ namespace BetterBepInEx
                 _focusWindow = false;
             }
 
-            if (!IsCapturing && !_stock.StockCapturingKey && (!Passive || mouseOver))
+            if (!IsCapturing && !_stock.StockCapturingKey && !Passive)
             {
                 // What the stock menu does, kept for anything outside the raid player the game
-                // reads through Unity's axes.
+                // reads through Unity's axes. Never in the background: it makes every held key and
+                // mouse button read as released, and the cursor is free there, so whenever it sat
+                // over the faded window (most of the screen) the player could look around but not
+                // move, shoot or use a key. 0.4.0 did exactly that.
                 Input.ResetInputAxes();
             }
         }

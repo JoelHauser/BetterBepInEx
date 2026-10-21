@@ -30,7 +30,7 @@ namespace BetterBepInEx
         public const string PluginName = "BetterBepInEx";
 
         /// <summary>Must match the csproj's Version. Two places, and they have to agree.</summary>
-        public const string PluginVersion = "0.4.0";
+        public const string PluginVersion = "0.4.1";
 
         private const string GameFontHint = "Bender";
 
