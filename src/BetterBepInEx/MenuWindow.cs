@@ -499,14 +499,13 @@ namespace BetterBepInEx
             GUILayout.Label(TitleLabel, _skin.Title, Opts(Opt.NoExpandHeight, _skin.T(34)));
             GUILayout.Space(U(20));
 
-            string typed = SearchBox(SearchControl, _search, SearchHint, _skin.SearchField, Opts(Opt.SearchWidth, U(220), U(560)));
+            string typed = SearchBox(SearchControl, _search, SearchHint, _skin.SearchField, out bool cleared, Opts(Opt.SearchWidth, U(180), U(560)));
             if (typed != _search)
             {
                 SetSearch(typed);
             }
-            if (_search.Length > 0 && GUILayout.Button(Cached("Clear"), _skin.Ghost, Opts(Opt.NoExpandHeight, _skin.T(34))))
+            if (cleared)
             {
-                SetSearch(string.Empty);
                 _focusSearch = true;
             }
             if (_focusSearch)
@@ -516,6 +515,9 @@ namespace BetterBepInEx
             }
 
             GUILayout.FlexibleSpace();
+
+            AdvancedToggle();
+            GUILayout.Space(U(10));
 
             GUI.enabled = _model.History.CanUndo;
             UndoLabel.tooltip = UndoTip();
@@ -538,14 +540,29 @@ namespace BetterBepInEx
             GUILayout.EndHorizontal();
         }
 
-        /// <summary>A text field with a search glass and a placeholder drawn inside it.</summary>
-        private string SearchBox(string control, string text, GUIContent hint, GUIStyle style, params GUILayoutOption[] options)
+        private static readonly GUIContent ClearLabel = new GUIContent("×", "Clear");
+        private static readonly GUIContent AdvancedLabel = new GUIContent("Show advanced",
+            "List the settings, and the mods, that their authors mark as advanced or hide from the menu. "
+            + "They are tagged where they appear. Search always finds them.");
+        private readonly GUIContent _fieldContent = new GUIContent();
+
+        /// <summary>
+        /// A text field with a search glass and a placeholder drawn inside it and, once something
+        /// is typed, a × at its right end that clears it. The × lives inside the box so the title
+        /// bar does not shift when typing starts, as a separate Clear button made it.
+        /// </summary>
+        private string SearchBox(string control, string text, GUIContent hint, GUIStyle style, out bool cleared, params GUILayoutOption[] options)
         {
+            _fieldContent.text = text;
+            Rect field = GUILayoutUtility.GetRect(_fieldContent, style, options);
+            Rect clear = new Rect(field.xMax - field.height, field.y, field.height, field.height);
+            // Before the field, so the click reaches it first; drawn after it, so it shows on top.
+            // A zero rect while empty: the button is always called, so the controls never change.
+            cleared = GUI.Button(text.Length > 0 ? clear : Rect.zero, GUIContent.none, GUIStyle.none) && text.Length > 0;
             GUI.SetNextControlName(control);
-            string typed = GUILayout.TextField(text, style, options);
+            string typed = GUI.TextField(field, text, style);
             if (Event.current.type == EventType.Repaint)
             {
-                Rect field = GUILayoutUtility.GetLastRect();
                 float icon = Mathf.Min(U(16), field.height - U(8));
                 _skin.Fill(new Rect(field.x + style.padding.left - icon - U(8), field.y + (field.height - icon) / 2f, icon, icon), Skin.MutedColor, _skin.SearchIcon);
                 if (text.Length == 0 && _focusedName != control)
@@ -553,8 +570,34 @@ namespace BetterBepInEx
                     _skin.Muted.Draw(new Rect(field.x + style.padding.left - U(2), field.y, field.width - style.padding.left, field.height),
                         hint, false, false, false, false);
                 }
+                else if (text.Length > 0)
+                {
+                    _skin.ClearGlyph.Draw(clear, ClearLabel, clear.Contains(Event.current.mousePosition), false, false, false);
+                }
             }
-            return typed;
+            return cleared ? string.Empty : typed;
+        }
+
+        /// <summary>
+        /// Show advanced, in the title bar on every page: the one place to reveal what mods hide,
+        /// whatever page is open. A labelled switch, so its state reads at a glance.
+        /// </summary>
+        private void AdvancedToggle()
+        {
+            GUIStyle style = _skin.HeaderToggle;
+            Rect r = GUILayoutUtility.GetRect(AdvancedLabel, style, NoExpand);
+            bool on = ShowHidden;
+            if (GUI.Button(r, AdvancedLabel, style))
+            {
+                ToggleHidden();
+            }
+            if (Event.current.type == EventType.Repaint)
+            {
+                float h = U(24);
+                float w = U(40);
+                Rect pill = new Rect(r.xMax - U(12) - w, r.y + Mathf.Round((r.height - h) / 2f), w, h);
+                DrawPill(pill, on, AdvancedLabel, r.Contains(Event.current.mousePosition));
+            }
         }
 
         // The tooltips are rebuilt only when the next undo or redo changes, not on every event.
@@ -602,6 +645,31 @@ namespace BetterBepInEx
                 _searchResultsFor = null;
                 return;
             }
+            FindSearchResults();
+            _searchSummary.text = SearchSummary();
+        }
+
+        private readonly GUIContent _searchSummary = new GUIContent();
+
+        /// <summary>"12 settings in 4 mods": the search page's subtitle, made once per search.</summary>
+        private string SearchSummary()
+        {
+            int mods = 0;
+            Page last = null;
+            foreach (Row row in _searchResults)
+            {
+                if (row.Page != last)
+                {
+                    mods++;
+                    last = row.Page;
+                }
+            }
+            return _searchResults.Count == 0 ? "No setting matches."
+                : _searchResults.Count + Plural(_searchResults.Count, " setting", " settings") + " in " + mods + Plural(mods, " mod", " mods");
+        }
+
+        private void FindSearchResults()
+        {
             if (_searchResultsFor != null && _query.Narrows(_searchResultsFor))
             {
                 // Typing on: every match is among the last ones, so only they are checked.
@@ -656,7 +724,7 @@ namespace BetterBepInEx
         private void DrawSidebar()
         {
             EventType type = Event.current.type;
-            string typed = SearchBox(ModFilterControl, _modFilter, ModFilterHint, _skin.SidebarFilter, Expand);
+            string typed = SearchBox(ModFilterControl, _modFilter, ModFilterHint, _skin.SidebarFilter, out _, Expand);
             if (typed != _modFilter)
             {
                 _modFilter = typed;
@@ -862,11 +930,17 @@ namespace BetterBepInEx
             {
                 _skin.SidebarSelected.Draw(r, false, false, false, false);
             }
-            bool clicked = GUI.Button(r, GUIContent.none, _skin.SidebarItem);
+            bool clicked = GUI.Button(r, GUIContent.none, GUIStyle.none);
 
             if (Event.current.type != EventType.Repaint)
             {
                 return clicked;
+            }
+            bool hover = !ListMoving && r.Contains(Event.current.mousePosition);
+            if (hover && !selected)
+            {
+                // Drawn here rather than by the button, so it waits while the list scrolls.
+                _skin.SidebarItem.Draw(r, true, false, false, false);
             }
             if (selected)
             {
@@ -883,7 +957,7 @@ namespace BetterBepInEx
             }
             Rect text = new Rect(r.x, r.y, r.width - badgeWidth, r.height);
             GUIStyle textStyle = selected ? _skin.SidebarTextActive : dimmed ? _skin.SidebarTextHidden : _skin.SidebarText;
-            textStyle.Draw(text, label, !ListMoving && r.Contains(Event.current.mousePosition), false, false, false);
+            textStyle.Draw(text, label, hover, false, false, false);
             return clicked;
         }
 

@@ -71,7 +71,7 @@ namespace BetterBepInEx
         public GUIStyle Label, Muted, Small, Description, DangerText, Badge, BadgeDanger, BadgeMuted, Tag;
         public GUIStyle SidebarItem, SidebarText, SidebarTextActive, SidebarTextHidden, SidebarHeader, SidebarSelected, SidebarToggle, SidebarFilter, SidebarHiddenToggle;
         public GUIStyle CardTop, CardMid, CardBottom, CardSingle, RowHover, ShadowStyle, KeyHint, KeyHintActive;
-        public GUIStyle Button, ButtonAccent, ButtonDanger, Ghost, GhostDanger, IconButton, LinkButton, Dropdown;
+        public GUIStyle Button, ButtonAccent, ButtonDanger, Ghost, GhostOn, GhostDanger, IconButton, LinkButton, Dropdown, HeaderToggle, ClearGlyph;
         public GUIStyle RenameField, TextField, SearchField, NumberField, KeyField, KeyFieldActive, Keycap, KeyPlus;
         public GUIStyle Chip, ChipOn, TrackOn, TrackOff;
         public GUIStyle RowStyle, Popup, PopupItem, PopupItemActive, Status, Tooltip;
@@ -144,6 +144,8 @@ namespace BetterBepInEx
             Title = TextStyle(17, TextColor, FontStyle.Bold);
             PageTitle = TextStyle(22, TextColor, FontStyle.Bold);
             PageTitle.padding = Offset(U(2), U(2), 0, 0);
+            // A long mod name wraps under itself rather than pushing the page's buttons off the window.
+            PageTitle.wordWrap = true;
             PageSubtitle = TextStyle(12, MutedColor);
             PageSubtitle.wordWrap = true;
             // Headings in the scrolling lists carry padding, never margins: a heading scrolled out
@@ -235,6 +237,11 @@ namespace BetterBepInEx
             Ghost.normal.background = null;
             Ghost.normal.textColor = SoftText;
             Ghost.hover.background = Rounded(ButtonBg, 6, null);
+            // On: a ghost button in the accent, same size as the others, for a state that is set
+            // (a favourite, a mod hidden from the list). A chip beside ghost buttons sat shorter.
+            GhostOn = new GUIStyle(Ghost);
+            GhostOn.normal.textColor = Accent;
+            GhostOn.hover.textColor = Color.Lerp(Accent, Color.white, 0.3f);
             GhostDanger = new GUIStyle(Ghost);
             GhostDanger.normal.textColor = Danger;
             GhostDanger.hover.textColor = Color.white;
@@ -243,7 +250,21 @@ namespace BetterBepInEx
             IconButton.fontSize = FontSize(18);
             IconButton.padding = Offset(0, 0, 0, U(2));
             IconButton.fixedWidth = U(34);
-            IconButton.fixedHeight = T(32);
+            // The height of the fields it sits beside (search box, keybind field), so they line up.
+            IconButton.fixedHeight = T(34);
+
+            // A ghost button with a small switch drawn at its right end, for a setting that
+            // applies everywhere (the title bar's Show advanced).
+            HeaderToggle = new GUIStyle(Ghost);
+            HeaderToggle.alignment = TextAnchor.MiddleLeft;
+            HeaderToggle.padding = Offset(U(12), U(12) + U(40) + U(10), U(6), U(7));
+            HeaderToggle.fixedHeight = T(34);
+
+            // The × inside a search box that clears it.
+            ClearGlyph = TextStyle(16, MutedColor);
+            ClearGlyph.alignment = TextAnchor.MiddleCenter;
+            ClearGlyph.padding = Offset(0, 0, 0, U(2));
+            ClearGlyph.hover.textColor = TextColor;
             LinkButton = TextStyle(12, Accent);
             LinkButton.hover.textColor = Color.white;
             LinkButton.padding = Offset(U(6), U(2), U(2), U(2));
@@ -271,14 +292,16 @@ namespace BetterBepInEx
             SearchField.border = new RectOffset(R(15) + 1, R(15) + 1, R(15) + 1, R(15) + 1);
             SearchField.fontSize = FontSize(14);
             SearchField.fixedHeight = T(34);
-            SearchField.padding = Offset(U(38), U(14), U(7), U(7));
+            // Right padding leaves room for the clear × drawn inside the box.
+            SearchField.padding = Offset(U(38), U(36), U(7), U(7));
             NumberField = new GUIStyle(TextField);
             NumberField.alignment = TextAnchor.MiddleRight;
             RenameField = new GUIStyle(TextField) { fontSize = FontSize(18), fontStyle = FontStyle.Bold };
+            RenameField.fixedHeight = T(38);
             SidebarFilter = new GUIStyle(SearchField);
             SidebarFilter.fontSize = FontSize(13);
             SidebarFilter.fixedHeight = T(30);
-            SidebarFilter.padding = Offset(U(34), U(12), U(6), U(6));
+            SidebarFilter.padding = Offset(U(34), U(30), U(6), U(6));
             KeyHint = TextStyle(13, MutedColor);
             KeyHintActive = TextStyle(13, Accent, FontStyle.Bold);
             KeyField = Make(TextStyle(13, MutedColor), input, 6);

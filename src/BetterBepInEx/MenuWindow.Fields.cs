@@ -46,7 +46,7 @@ namespace BetterBepInEx
         private KeyCode[] _keysToCheck;
 
         private readonly HashSet<Row> _expandedColors = new HashSet<Row>();
-        private readonly Dictionary<Row, float> _switchAnim = new Dictionary<Row, float>();
+        private readonly Dictionary<object, float> _switchAnim = new Dictionary<object, float>();
         private Row _colorEditRow;
         private string _colorEditBuffer;
 
@@ -113,19 +113,23 @@ namespace BetterBepInEx
             }
             GUILayout.EndHorizontal();
 
-            if (Event.current.type != EventType.Repaint)
+            if (Event.current.type == EventType.Repaint)
             {
-                return;
+                DrawPill(r, value, row, r.Contains(Event.current.mousePosition) && GUI.enabled);
             }
+        }
+
+        /// <summary>The pill switch's look, on Repaint: track, accent fill fading in, and the sliding knob.</summary>
+        private void DrawPill(Rect r, bool value, object key, bool hover)
+        {
             float target = value ? 1f : 0f;
-            if (!_switchAnim.TryGetValue(row, out float t))
+            if (!_switchAnim.TryGetValue(key, out float t))
             {
                 t = target;
             }
             t = Mathf.MoveTowards(t, target, Time.unscaledDeltaTime * 9f);
-            _switchAnim[row] = t;
+            _switchAnim[key] = t;
 
-            bool hover = r.Contains(Event.current.mousePosition) && GUI.enabled;
             _skin.TrackOff.Draw(r, false, false, false, false);
             if (t > 0f)
             {
@@ -134,14 +138,15 @@ namespace BetterBepInEx
                 _skin.TrackOn.Draw(r, false, false, false, false);
                 GUI.color = old;
             }
-            float knob = r.height - U(6);
-            float x = r.x + U(3) + t * (r.width - knob - U(6));
+            float inset = Mathf.Max(2f, Mathf.Round(r.height * 0.12f));
+            float knob = r.height - inset * 2f;
+            float x = r.x + inset + t * (r.width - knob - inset * 2f);
             Color knobColor = Color.Lerp(new Color(0.8f, 0.82f, 0.85f), Color.white, t);
             if (hover)
             {
                 knobColor = Color.white;
             }
-            _skin.Fill(new Rect(x, r.y + U(3), knob, knob), knobColor, _skin.KnobTex);
+            _skin.Fill(new Rect(x, r.y + inset, knob, knob), knobColor, _skin.KnobTex);
         }
 
         // ------------------------------------------------------------------ numbers

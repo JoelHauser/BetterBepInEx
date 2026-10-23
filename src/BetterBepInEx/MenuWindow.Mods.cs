@@ -262,15 +262,17 @@ namespace BetterBepInEx
                 GUI.FocusControl(RenameControl);
                 _focusRename = false;
             }
-            if (GUILayout.Button("Save", _skin.ButtonAccent, NoExpand))
+            // As tall as the name field, so the row lines up.
+            GUILayoutOption[] height = Opts(Opt.NoExpandHeight, _skin.RenameField.fixedHeight);
+            if (GUILayout.Button(Cached("Save"), _skin.ButtonAccent, height))
             {
                 CommitRename();
             }
-            if (GUILayout.Button("Cancel", _skin.Ghost, NoExpand))
+            if (GUILayout.Button(Cached("Cancel"), _skin.Ghost, height))
             {
                 _renaming = null;
             }
-            if (page.CustomName != null && GUILayout.Button("Use its own name", _skin.Ghost, NoExpand))
+            if (page.CustomName != null && GUILayout.Button(Cached("Use its own name"), _skin.Ghost, height))
             {
                 _renameBuffer = string.Empty;
                 CommitRename();
