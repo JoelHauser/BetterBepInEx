@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -12,9 +11,10 @@ namespace BetterBepInEx
     /// The Screenshot button on a mod's page: a picture of every setting the page shows, with the
     /// changed ones marked, for sending to whoever asked for your config. It only reads settings.
     ///
-    /// The picture is drawn with the menu's own skin, over the whole screen in place of the menu,
-    /// for a frame, then read back off the screen at the end of that frame. A list taller than the
-    /// screen is drawn a screenful at a time over a few frames and stitched together.
+    /// The picture is drawn with the menu's own skin into a render texture, never on screen, a
+    /// screenful at a time, each read back and stitched together, all within one Repaint. The menu
+    /// then draws as usual in the same event, so nothing flickers. (1.1.0 drew the picture on
+    /// screen in place of the menu for a frame or more, and the screen flashed.)
     /// </summary>
     internal sealed partial class MenuWindow
     {
@@ -51,7 +51,6 @@ namespace BetterBepInEx
         private sealed class Snapshot
         {
             public Page Page;
-            public bool LaidOut;
             public readonly List<SnapItem> Items = new List<SnapItem>();
             public readonly List<Vector2> Parts = new List<Vector2>();
             public int Width;
@@ -60,19 +59,18 @@ namespace BetterBepInEx
             public GUIStyle ValueStyle;
             public GUIStyle NumberStyle;
 
-            // The screenful to draw this frame, and the frame it was drawn in.
+            // The screenful being drawn.
             public int Part;
             public int TileTop;
             public int TileHeight;
-            public int DrawnFrame = -1;
-            public bool Failed;
         }
 
-        private Snapshot _snapshot;
+        /// <summary>The page whose picture the next Repaint takes.</summary>
+        private Page _snapshotPage;
 
         private bool CanSnapshot(Page page)
         {
-            if (_snapshot != null)
+            if (_snapshotPage != null)
             {
                 return false;
             }
@@ -93,80 +91,38 @@ namespace BetterBepInEx
         {
             CommitEdit();
             ClosePopup();
-            _plugin.StartCoroutine(TakeSnapshot(page));
+            _snapshotPage = page;
         }
 
-        private IEnumerator TakeSnapshot(Page page)
+        /// <summary>
+        /// At the top of OnGUI: on a Repaint, takes the picture asked for, if any. Drawing only
+        /// happens on Repaint, and the click that asks for it is a mouse event of its own.
+        /// </summary>
+        private void TakePendingSnapshot()
         {
-            Snapshot s = new Snapshot { Page = page };
-            // Starts on a frame of its own, not partway through the click's.
-            yield return null;
-            _snapshot = s;
+            if (_snapshotPage == null || Event.current.type != EventType.Repaint)
+            {
+                return;
+            }
+            Page page = _snapshotPage;
+            _snapshotPage = null;
             List<string> files = new List<string>();
-            Texture2D texture = null;
             bool copied = false;
-            string failure = null;
+            string failure;
             try
             {
-                // The first part is laid out on the first draw; the rest follow from it.
-                for (int part = 0; failure == null && (part == 0 || part < s.Parts.Count); part++)
-                {
-                    s.Part = part;
-                    // The first part's first screenful is sized when it is laid out, on its first draw.
-                    s.TileTop = part == 0 ? 0 : (int)s.Parts[part].x;
-                    s.TileHeight = part == 0 ? Screen.height : Mathf.Min(Screen.height, (int)(s.Parts[part].y - s.Parts[part].x));
-                    while (true)
-                    {
-                        yield return new WaitForEndOfFrame();
-                        if (s.Failed || s.DrawnFrame != Time.frameCount)
-                        {
-                            failure = s.Failed ? "it could not be drawn (the BepInEx log has the error)" : "the menu was closed while it was taken";
-                            break;
-                        }
-                        Vector2 range = s.Parts[part];
-                        int partTop = (int)range.x;
-                        int partHeight = (int)(range.y - range.x);
-                        if (texture == null || texture.height != partHeight)
-                        {
-                            if (texture != null)
-                            {
-                                UnityEngine.Object.Destroy(texture);
-                            }
-                            texture = new Texture2D(s.Width, partHeight, TextureFormat.RGB24, false);
-                        }
-                        // Screen pixels count up from the bottom; the tile is the top TileHeight rows.
-                        int below = partTop + partHeight - s.TileTop - s.TileHeight;
-                        texture.ReadPixels(new Rect(0, Screen.height - s.TileHeight, s.Width, s.TileHeight), 0, below);
-
-                        int next = s.TileTop + s.TileHeight;
-                        if (next >= partTop + partHeight)
-                        {
-                            break;
-                        }
-                        s.TileTop = next;
-                        s.TileHeight = Mathf.Min(Screen.height, partTop + partHeight - next);
-                    }
-                    if (failure != null)
-                    {
-                        break;
-                    }
-                    failure = SaveSnapshotPart(texture, SnapshotFile(page, part, s.Parts.Count), s.Parts.Count == 1, files, ref copied);
-                }
+                failure = TakeSnapshot(page, files, ref copied);
             }
-            finally
+            catch (Exception e)
             {
-                // Also on an exception thrown above, or the coroutine stopped: the menu comes back.
-                _snapshot = null;
-                if (texture != null)
-                {
-                    UnityEngine.Object.Destroy(texture);
-                }
+                BetterBepInExPlugin.Log.LogError("Failed to take a screenshot of " + page.DisplayName + ": " + e);
+                failure = "it could not be drawn (the BepInEx log has the error)";
             }
 
             if (failure != null || files.Count == 0)
             {
                 SetStatus("No screenshot: " + (failure ?? "nothing was saved") + ".", true);
-                yield break;
+                return;
             }
             string folder = SnapshotFolderShown;
             if (files.Count > 1)
@@ -184,6 +140,133 @@ namespace BetterBepInEx
                 ShowInExplorer(files[0]);
             }
             BetterBepInExPlugin.Log.LogInfo("Saved a screenshot of " + page.DisplayName + "'s settings: " + string.Join(", ", files.ToArray()));
+        }
+
+        /// <summary>Draws, reads back and saves the picture. Returns why it failed, or null.</summary>
+        private string TakeSnapshot(Page page, List<string> files, ref bool copied)
+        {
+            Snapshot s = new Snapshot { Page = page };
+            LayoutSnapshot(s);
+
+            // As big as the screen, so the GUI's pixel coordinates and clipping hold as they are.
+            int screenWidth = Screen.width;
+            int screenHeight = Screen.height;
+            RenderTexture target = RenderTexture.GetTemporary(screenWidth, screenHeight, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Default);
+            RenderTexture previous = RenderTexture.active;
+            Color oldColor = GUI.color;
+            bool oldEnabled = GUI.enabled;
+            Texture2D texture = null;
+            RenderTexture.active = target;
+            GL.PushMatrix();
+            try
+            {
+                GL.LoadPixelMatrix(0, screenWidth, screenHeight, 0);
+                GUI.color = Color.white;
+                GUI.enabled = true;
+                bool? flipped = DrawsFlipped(screenWidth, screenHeight);
+                if (flipped == null)
+                {
+                    return "it could not be drawn offscreen";
+                }
+
+                for (int part = 0; part < s.Parts.Count; part++)
+                {
+                    int partTop = (int)s.Parts[part].x;
+                    int partHeight = (int)(s.Parts[part].y - s.Parts[part].x);
+                    if (texture == null || texture.height != partHeight)
+                    {
+                        if (texture != null)
+                        {
+                            UnityEngine.Object.Destroy(texture);
+                        }
+                        texture = new Texture2D(s.Width, partHeight, TextureFormat.RGB24, false);
+                    }
+                    s.Part = part;
+                    for (int top = partTop; top < partTop + partHeight; top += screenHeight)
+                    {
+                        s.TileTop = top;
+                        s.TileHeight = Mathf.Min(screenHeight, partTop + partHeight - top);
+                        DrawSnapshotTile(s);
+                        // ReadPixels counts rows up from the bottom. Upright, the tile is the
+                        // target's top rows and goes where it sits in the picture. Upside down, it
+                        // is the bottom rows, the whole part comes out upside down, and is turned
+                        // over once it is complete.
+                        int fromTop = top - partTop;
+                        if (flipped.Value)
+                        {
+                            texture.ReadPixels(new Rect(0, 0, s.Width, s.TileHeight), 0, fromTop);
+                        }
+                        else
+                        {
+                            texture.ReadPixels(new Rect(0, screenHeight - s.TileHeight, s.Width, s.TileHeight), 0, partHeight - fromTop - s.TileHeight);
+                        }
+                    }
+                    if (flipped.Value)
+                    {
+                        FlipRows(texture);
+                    }
+                    string failure = SaveSnapshotPart(texture, SnapshotFile(page, part, s.Parts.Count), s.Parts.Count == 1, files, ref copied);
+                    if (failure != null)
+                    {
+                        return failure;
+                    }
+                }
+                return null;
+            }
+            finally
+            {
+                GL.PopMatrix();
+                RenderTexture.active = previous;
+                RenderTexture.ReleaseTemporary(target);
+                GUI.color = oldColor;
+                GUI.enabled = oldEnabled;
+                if (texture != null)
+                {
+                    UnityEngine.Object.Destroy(texture);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Whether the GUI drawn into the render texture reads back upside down. Graphics APIs
+        /// disagree on which way up a render texture is, and nothing documents what IMGUI does
+        /// about it, so it is measured: a white square in the top-left corner of a black target,
+        /// looked for at both ends. Null when it is at neither, or both: drawing offscreen failed.
+        /// </summary>
+        private bool? DrawsFlipped(int width, int height)
+        {
+            _skin.Fill(new Rect(0, 0, width, height), Color.black);
+            _skin.Fill(new Rect(0, 0, 8, 8), Color.white);
+            Texture2D probe = new Texture2D(8, 16, TextureFormat.RGB24, false);
+            try
+            {
+                probe.ReadPixels(new Rect(0, height - 8, 8, 8), 0, 8);
+                probe.ReadPixels(new Rect(0, 0, 8, 8), 0, 0);
+                bool atTop = probe.GetPixel(4, 12).r > 0.5f;
+                bool atBottom = probe.GetPixel(4, 4).r > 0.5f;
+                return atTop == atBottom ? (bool?)null : atBottom;
+            }
+            finally
+            {
+                UnityEngine.Object.Destroy(probe);
+            }
+        }
+
+        private static void FlipRows(Texture2D texture)
+        {
+            int width = texture.width;
+            int height = texture.height;
+            Color32[] pixels = texture.GetPixels32();
+            Color32[] row = new Color32[width];
+            for (int y = 0; y < height / 2; y++)
+            {
+                int a = y * width;
+                int b = (height - 1 - y) * width;
+                Array.Copy(pixels, a, row, 0, width);
+                Array.Copy(pixels, b, pixels, a, width);
+                Array.Copy(row, 0, pixels, b, width);
+            }
+            texture.SetPixels32(pixels);
         }
 
         /// <summary>Writes one picture, and copies it when it is the only one. Returns why it failed, or null.</summary>
@@ -236,23 +319,13 @@ namespace BetterBepInEx
 
         // ------------------------------------------------------------------ drawing
 
-        /// <summary>Draws this frame's screenful of the picture over the whole screen, on Repaint.</summary>
-        private void DrawSnapshot()
+        /// <summary>Draws one screenful of the picture at the top-left of the current target.</summary>
+        private void DrawSnapshotTile(Snapshot s)
         {
-            Snapshot s = _snapshot;
-            if (Event.current.type != EventType.Repaint)
-            {
-                return;
-            }
-            if (!s.LaidOut)
-            {
-                LayoutSnapshot(s);
-                s.TileHeight = Mathf.Min(Screen.height, (int)(s.Parts[0].y - s.Parts[0].x));
-            }
-            GUI.color = Color.white;
-            GUI.enabled = true;
-            // The whole screen, so the moment it shows reads as a flash rather than a glitch.
-            _skin.Fill(new Rect(0, 0, Screen.width, Screen.height), Skin.WindowBg);
+            // Black first: the window colour may be see-through, and the last tile is still there.
+            Rect tile = new Rect(0, 0, s.Width, s.TileHeight);
+            _skin.Fill(tile, Color.black);
+            _skin.Fill(tile, Skin.WindowBg);
 
             float top = s.TileTop;
             float bottom = s.TileTop + s.TileHeight;
@@ -272,7 +345,6 @@ namespace BetterBepInEx
                     DrawSnapshotRow(s, item, y);
                 }
             }
-            s.DrawnFrame = Time.frameCount;
         }
 
         private void DrawSnapshotRow(Snapshot s, SnapItem item, float y)
@@ -334,7 +406,6 @@ namespace BetterBepInEx
         private void LayoutSnapshot(Snapshot s)
         {
             Page page = s.Page;
-            s.LaidOut = true;
             s.Width = Mathf.Min((int)U(820), Screen.width);
             s.Pad = U(28);
             float inner = s.Width - s.Pad * 2f;
