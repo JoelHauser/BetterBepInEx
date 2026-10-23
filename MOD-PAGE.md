@@ -7,7 +7,6 @@
   The Forge shows the word "Tarkov" as "T*****", so say "EFT".
 
   Images are served from the repository (docs/images), so they show once pushed to main.
-  menu.png and keybinds.png are still to be taken in game.
 
   Short-description field:
     "A better F12 menu: every mod in a sidebar, search across all settings, see what you changed, undo, and screenshot your config."
