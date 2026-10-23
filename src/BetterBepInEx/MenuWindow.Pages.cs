@@ -10,26 +10,16 @@ namespace BetterBepInEx
     {
         All,
         Changed,
-        Toggle,
-        Number,
-        List,
-        Keybind,
-        Text,
-        Other,
     }
 
     internal sealed partial class MenuWindow
     {
-        private static readonly RowFilter[] Filters =
-        {
-            RowFilter.All, RowFilter.Changed, RowFilter.Toggle, RowFilter.Number,
-            RowFilter.List, RowFilter.Keybind, RowFilter.Text, RowFilter.Other,
-        };
+        private static readonly RowFilter[] Filters = { RowFilter.All, RowFilter.Changed };
 
         private static readonly GUIContent HiddenTag = new GUIContent("HIDDEN",
             "Its mod hides this setting from the menu. Change it only if you know what it does.");
 
-        private static readonly string[] FilterNames = { "All  ", "Changed  ", "Toggles  ", "Numbers  ", "Lists  ", "Keybinds  ", "Text  ", "Other  " };
+        private static readonly string[] FilterNames = { "All  ", "Changed  " };
 
         private static readonly GUIContent FavoriteLabel = new GUIContent("Favorite", "Listed under Favorites at the top of the mods list. Click to remove it.");
         private static readonly GUIContent AddFavoriteLabel = new GUIContent("Add to favorites", "List this mod under Favorites at the top of the mods list");
@@ -70,7 +60,7 @@ namespace BetterBepInEx
         private const string PageSearch = "@search";
 
         private RowFilter _filter = RowFilter.All;
-        private readonly int[] _filterCounts = new int[8];
+        private readonly int[] _filterCounts = new int[2];
         private int _filterHiddenCount;
         private RowFilter _chipsFilter = RowFilter.All;
         private bool _chipsShowHidden;
@@ -155,20 +145,12 @@ namespace BetterBepInEx
             {
                 return false;
             }
-            switch (filter)
-            {
-                case RowFilter.All:
-                    return true;
-                case RowFilter.Changed:
-                    return row.IsChanged;
-                default:
-                    return (int)row.Category == (int)filter - 2;
-            }
+            return filter == RowFilter.All || row.IsChanged;
         }
 
         /// <summary>
-        /// The chip bar: one chip per kind of setting present in <paramref name="rows"/>, with its
-        /// count, and the advanced toggle on the right.
+        /// The chip bar: All and Changed with their counts in <paramref name="rows"/>, and the
+        /// advanced hint on the right.
         /// </summary>
         private void DrawFilterBar(List<Row> rows, bool modSearch = false)
         {
@@ -198,7 +180,6 @@ namespace BetterBepInEx
                     {
                         _filterCounts[1]++;
                     }
-                    _filterCounts[(int)row.Category + 2]++;
                 }
             }
             // Which chips there are is fixed on Layout too. The title bar's and sidebar's switches
