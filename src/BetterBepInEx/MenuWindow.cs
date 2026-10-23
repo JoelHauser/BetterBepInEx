@@ -139,7 +139,7 @@ namespace BetterBepInEx
 
         /// <summary>
         /// Bumped whenever what a list shows may have changed other than through the model (a new
-        /// search, Show hidden, a rename), so the page lists its rows again.
+        /// search, Show hidden), so the page lists its rows again.
         /// </summary>
         private int _listStamp;
 
@@ -166,7 +166,7 @@ namespace BetterBepInEx
                 }
             }
             _page = string.IsNullOrEmpty(_plugin.LastPage.Value) ? PageChanged : _plugin.LastPage.Value;
-            LoadCustomizations();
+            LoadRecent();
         }
 
         private float U(float v) => _skin.U(v);
@@ -344,8 +344,8 @@ namespace BetterBepInEx
 
             // A release the slider itself did not get (let go over another window, or outside the
             // game) still ends the drag. Read from the GUI event, never from Input: the
-            // ResetInputAxes below makes Input report the button up every frame, which ended
-            // every drag one frame after it began (0.4.6 to 0.4.9).
+            // ResetInputAxes below makes Input report the button up every frame, which would end
+            // every drag one frame after it began.
             if (_slideRow != null && e.rawType == EventType.MouseUp && e.button == 0)
             {
                 EndSlide();
@@ -359,7 +359,7 @@ namespace BetterBepInEx
                 // reads through Unity's axes. Never in the background: it makes every held key and
                 // mouse button read as released, and the cursor is free there, so whenever it sat
                 // over the faded window (most of the screen) the player could look around but not
-                // move, shoot or use a key. 0.4.0 did exactly that.
+                // move, shoot or use a key.
                 Input.ResetInputAxes();
             }
         }
@@ -1166,7 +1166,7 @@ namespace BetterBepInEx
         /// <summary>
         /// Centred, 84% of the screen's height, and as wide as the layout uses at this scale: a
         /// setting's name and description beside its control, without a gap between them. Wider
-        /// only spread the rows out (0.4.10 was 1320 at 1080p scale, or 55% of a wide screen).
+        /// only spreads the rows out.
         /// </summary>
         private Rect DefaultRect()
         {

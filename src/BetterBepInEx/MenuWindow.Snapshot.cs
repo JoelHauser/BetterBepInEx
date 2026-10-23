@@ -13,8 +13,8 @@ namespace BetterBepInEx
     ///
     /// The picture is drawn with the menu's own skin into a render texture, never on screen, a
     /// screenful at a time, each read back and stitched together, all within one Repaint. The menu
-    /// then draws as usual in the same event, so nothing flickers. (1.1.0 drew the picture on
-    /// screen in place of the menu for a frame or more, and the screen flashed.)
+    /// then draws as usual in the same event. Drawn on screen in place of the menu instead, even
+    /// for a frame, the screen visibly flashes.
     /// </summary>
     internal sealed partial class MenuWindow
     {
@@ -501,9 +501,6 @@ namespace BetterBepInEx
                 case RowKind.Range:
                 case RowKind.Number:
                     valueH = Mathf.Ceil(s.NumberStyle.CalcHeight(value, Mathf.Min(U(140), s.ValueWidth)));
-                    break;
-                case RowKind.Color:
-                    valueH = Mathf.Ceil(s.ValueStyle.CalcHeight(value, s.ValueWidth));
                     break;
                 default:
                     valueH = Mathf.Ceil(s.ValueStyle.CalcHeight(value, s.ValueWidth));

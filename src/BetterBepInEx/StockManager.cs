@@ -31,7 +31,6 @@ namespace BetterBepInEx
         /// <summary>The stock menu's own hotkey, F12 by default. Shown on this mod's page.</summary>
         public ConfigEntry<KeyboardShortcut> Hotkey { get; private set; }
 
-        private AccessTools.FieldRef<StockCM, List<SettingEntryBase>> _allSettings;
         private object _fieldDrawer;
         private Action<SettingEntryBase> _drawSettingValue;
         private Func<bool> _drawCurrentDropdown;
@@ -62,7 +61,6 @@ namespace BetterBepInEx
                 Type drawer = AccessTools.TypeByName("ConfigurationManager.SettingFieldDrawer");
                 Type configEntry = AccessTools.TypeByName("ConfigurationManager.ConfigSettingEntry");
 
-                _allSettings = AccessTools.FieldRefAccess<StockCM, List<SettingEntryBase>>("_allSettings");
                 Hotkey = (ConfigEntry<KeyboardShortcut>)Need(AccessTools.Field(cm, "_keybind"), "_keybind").GetValue(Instance);
 
                 _fieldDrawer = Need(AccessTools.Field(cm, "_fieldDrawer"), "_fieldDrawer").GetValue(null);
@@ -89,9 +87,6 @@ namespace BetterBepInEx
                 _setIsAdvanced = Need(AccessTools.PropertySetter(typeof(SettingEntryBase), "IsAdvanced"), "SettingEntryBase.IsAdvanced");
                 _coreConfig = (ConfigFile)Need(AccessTools.Property(typeof(ConfigFile), "CoreConfig"), "ConfigFile.CoreConfig").GetValue(null, null);
                 _coreMeta = new BepInPlugin("BepInEx", "BepInEx", typeof(Chainloader).Assembly.GetName().Version.ToString());
-
-                // Touch the field ref once so a type mismatch shows up here, not on first open.
-                _allSettings(Instance);
             }
             catch (Exception e)
             {
@@ -126,9 +121,6 @@ namespace BetterBepInEx
             get => Instance.OverrideHotkey;
             set => Instance.OverrideHotkey = value;
         }
-
-        /// <summary>The stock list, as last built. Null before the menu has first been opened.</summary>
-        public List<SettingEntryBase> AllSettings => _allSettings(Instance);
 
         public ConfigEntryBase EntryOf(SettingEntryBase setting)
         {

@@ -42,8 +42,8 @@ namespace BetterBepInEx
 
         /// <summary>
         /// True when a list built from <paramref name="of"/> now may differ from the last one built
-        /// (which is then noted as this one). Settings changing value, a new search, Show hidden and
-        /// renames all show up in the model's version or <see cref="_listStamp"/>.
+        /// (which is then noted as this one). Settings changing value, a new search and Show hidden
+        /// all show up in the model's version or <see cref="_listStamp"/>.
         /// </summary>
         private bool Stale(ref ListSource last, object of)
         {

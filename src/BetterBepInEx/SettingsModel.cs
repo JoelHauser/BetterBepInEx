@@ -33,17 +33,6 @@ namespace BetterBepInEx
         Stock,
     }
 
-    /// <summary>The filter chip a row falls under.</summary>
-    internal enum RowCategory
-    {
-        Toggle,
-        Number,
-        List,
-        Keybind,
-        Text,
-        Other,
-    }
-
     internal sealed class Row
     {
         public SettingEntryBase Setting;
@@ -54,7 +43,6 @@ namespace BetterBepInEx
         public Page Page;
         public string Section;
         public RowKind Kind;
-        public RowCategory Category;
 
         /// <summary>The name with the description as its tooltip, for when descriptions are not printed.</summary>
         public GUIContent Name;
@@ -75,9 +63,6 @@ namespace BetterBepInEx
         /// <summary>IMGUI control name for this row's text field, so focus can be checked by row.</summary>
         public string ControlName;
         public string Haystack;
-
-        /// <summary>The haystack as built, before a player's name for the mod is added to it.</summary>
-        public string BaseHaystack;
         public bool IsChanged;
         public bool IsAdvanced;
 
@@ -101,7 +86,6 @@ namespace BetterBepInEx
 
         /// <summary>The value as of the last change this model saw, so the next change knows what it replaced.</summary>
         public object LastValue;
-
 
         /// <summary>
         /// The value's text as the row's field shows it, and the value it was made from. Formatting
@@ -164,11 +148,6 @@ namespace BetterBepInEx
     {
         public string Guid;
         public string DisplayName;
-
-
-
-
-        public string BaseSubtitle;
         public string OriginalName;
         public string SortKey;
         public string Version;
@@ -346,8 +325,7 @@ namespace BetterBepInEx
                 Website = WebsiteOf(plugin),
             };
             page.Title = new GUIContent(display);
-            page.BaseSubtitle = "v" + page.Version + (page.Author != null ? "  \u00B7  " + page.Author : string.Empty) + "  \u00B7  " + info.GUID;
-            page.Subtitle = new GUIContent(page.BaseSubtitle);
+            page.Subtitle = new GUIContent("v" + page.Version + (page.Author != null ? "  \u00B7  " + page.Author : string.Empty) + "  \u00B7  " + info.GUID);
             page.SidebarLabel = new GUIContent(display);
             PagesByGuid[info.GUID] = page;
             Pages.Add(page);
@@ -376,9 +354,7 @@ namespace BetterBepInEx
                            && !row.IsReadOnly;
             row.DescriptionContent = row.Description == null ? null : new GUIContent(row.Description);
             row.Haystack = SearchQuery.Haystack(page.DisplayName, page.OriginalName, page.Guid, page.Author, section, name, setting.Description);
-            row.BaseHaystack = row.Haystack;
             row.Kind = Classify(setting, row);
-            row.Category = CategoryOf(row.Kind);
             row.InitDefault();
             return row;
         }
@@ -446,30 +422,6 @@ namespace BetterBepInEx
                 return RowKind.Converted;
             }
             return RowKind.Stock;
-        }
-
-        private static RowCategory CategoryOf(RowKind kind)
-        {
-            switch (kind)
-            {
-                case RowKind.Bool:
-                    return RowCategory.Toggle;
-                case RowKind.Range:
-                case RowKind.Number:
-                    return RowCategory.Number;
-                case RowKind.Enum:
-                case RowKind.Flags:
-                case RowKind.List:
-                    return RowCategory.List;
-                case RowKind.Shortcut:
-                case RowKind.KeyCode:
-                    return RowCategory.Keybind;
-                case RowKind.Text:
-                case RowKind.Converted:
-                    return RowCategory.Text;
-                default:
-                    return RowCategory.Other;
-            }
         }
 
         private static void SetOptions(Row row, object[] options)
@@ -763,7 +715,7 @@ namespace BetterBepInEx
             }
         }
 
-        /// <summary>Writes values back for undo, redo, reset or a paste, as one undo step when grouped.</summary>
+        /// <summary>Writes values back for undo, redo or reset, as one undo step when grouped.</summary>
         public void Write(Row row, object value)
         {
             if (row.IsReadOnly)

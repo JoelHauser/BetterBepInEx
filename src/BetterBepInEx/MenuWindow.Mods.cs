@@ -42,7 +42,7 @@ namespace BetterBepInEx
         private int _sortedChanged = -1;
         private int _hiddenListCount;
 
-        private void LoadCustomizations()
+        private void LoadRecent()
         {
             _recent.Clear();
             foreach (string guid in (_plugin.RecentMods.Value ?? string.Empty).Split('|'))
