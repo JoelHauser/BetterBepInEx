@@ -10,6 +10,8 @@ A replacement for SPT's F12 mod settings menu. Same hotkey, same settings, a muc
   whole mod, or everything.
 - **Undo and redo** with Ctrl+Z / Ctrl+Y.
 - **Keybinds page** listing every mod's keys, with keys that several mods share at the top.
+- **Screenshot a mod's settings**: one click saves a picture of every setting, with your changes
+  marked, and copies it so you can paste it straight into Discord when someone asks for your config.
 - **Smooth sliders and scrolling**, a resizable window, and text that scales with your screen.
 - **Show advanced** in the title bar for hidden and advanced settings.
 - **Holds you still in raid** while the menu is open.
