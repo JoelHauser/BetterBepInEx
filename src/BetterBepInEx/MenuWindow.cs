@@ -270,6 +270,21 @@ namespace BetterBepInEx
             }
             GUI.skin = _skin.GuiSkin;
 
+            if (_snapshot != null)
+            {
+                // A screenshot is being taken: its picture is drawn in place of the menu.
+                try
+                {
+                    DrawSnapshot();
+                }
+                catch (Exception ex) when (!(ex is ExitGUIException))
+                {
+                    _snapshot.Failed = true;
+                    BetterBepInExPlugin.Log.LogError("Failed to draw a screenshot: " + ex);
+                }
+                return;
+            }
+
             EnsureRect();
             // Not mid-drag: a slider passing its default would add or drop its row from the
             // Changed page and the counts under the mouse. It all catches up on release.

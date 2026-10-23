@@ -9,7 +9,7 @@
     <Nullable>disable</Nullable>
 
     <!-- Must match BetterBepInExPlugin.PluginVersion. -->
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
 
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -63,6 +63,10 @@
     </Reference>
     <Reference Include="UnityEngine.InputLegacyModule">
       <HintPath>$(GameManaged)\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>$(GameManaged)\UnityEngine.ImageConversionModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="UnityEngine.TextRenderingModule">

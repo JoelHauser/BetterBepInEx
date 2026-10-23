@@ -319,6 +319,12 @@ namespace BetterBepInEx
             {
                 Application.OpenURL(page.Website);
             }
+            GUI.enabled = CanSnapshot(page);
+            if (GUILayout.Button(ScreenshotLabel, _skin.Ghost, NoExpand))
+            {
+                StartSnapshot(page);
+            }
+            GUI.enabled = true;
             GUI.enabled = page.ChangedCount > 0;
             if (Confirm(page, "Reset mod", "Reset ", page.ChangedCount, 50, _skin.GhostDanger, NoExpand))
             {
