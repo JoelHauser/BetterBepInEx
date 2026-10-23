@@ -205,7 +205,7 @@ namespace BetterBepInEx
             {
                 RowFilter f = Filters[i];
                 bool on = _chipsFilter == f;
-                if (ChipButton(ChipShown(i), CountedLabel(FilterNames[i], _filterCounts[i], 10 + i), on ? _skin.ChipOn : _skin.Chip))
+                if (ChipButton(ChipShown(i), CountedLabel(FilterNames[i], _filterCounts[i], 10 + i), on ? _skin.FilterChipOn : _skin.FilterChip))
                 {
                     _filter = on && f != RowFilter.All ? RowFilter.All : f;
                 }
@@ -213,7 +213,7 @@ namespace BetterBepInEx
             GUILayout.FlexibleSpace();
             // The switch itself is in the title bar, on every page. Here, only what it would add
             // to this list, where there is something: most mods hide or mark advanced nothing.
-            if (ChipButton(AdvancedChipShown, AdvancedChipLabel(), _skin.Chip))
+            if (ChipButton(AdvancedChipShown, AdvancedChipLabel(), _skin.FilterChip))
             {
                 ToggleHidden();
             }
@@ -271,13 +271,13 @@ namespace BetterBepInEx
             {
                 if (ChipShown(i))
                 {
-                    GUIStyle style = Filters[i] == _chipsFilter ? _skin.ChipOn : _skin.Chip;
+                    GUIStyle style = Filters[i] == _chipsFilter ? _skin.FilterChipOn : _skin.FilterChip;
                     chips += style.CalcSize(CountedLabel(FilterNames[i], _filterCounts[i], 10 + i)).x + style.margin.horizontal;
                 }
             }
             if (AdvancedChipShown)
             {
-                chips += _skin.Chip.CalcSize(AdvancedChipLabel()).x + _skin.Chip.margin.horizontal;
+                chips += _skin.FilterChip.CalcSize(AdvancedChipLabel()).x + _skin.FilterChip.margin.horizontal;
             }
             // The list's row width, not the whole area: the box then ends where the rows do, clear of the scrollbar.
             float room = _rowWidth - chips - U(6) - _skin.SidebarFilter.margin.horizontal;

@@ -73,7 +73,7 @@ namespace BetterBepInEx
         public GUIStyle CardTop, CardMid, CardBottom, CardSingle, RowHover, ShadowStyle, KeyHint, KeyHintActive;
         public GUIStyle Button, ButtonAccent, ButtonDanger, Ghost, GhostOn, GhostDanger, IconButton, LinkButton, Dropdown, HeaderToggle, ClearGlyph;
         public GUIStyle TextField, SearchField, NumberField, KeyField, KeyFieldActive, Keycap, KeyPlus;
-        public GUIStyle Chip, ChipOn, TrackOn, TrackOff;
+        public GUIStyle Chip, ChipOn, FilterChip, FilterChipOn, TrackOn, TrackOff;
         public GUIStyle RowStyle, Popup, PopupItem, PopupItemActive, Status, Tooltip;
         public GUIStyle Slider, SliderThumb, SliderTrack, SliderFill;
 
@@ -336,6 +336,20 @@ namespace BetterBepInEx
             ChipOn.hover.background = ChipOn.normal.background;
             ChipOn.normal.textColor = Accent;
             ChipOn.hover.textColor = Color.Lerp(Accent, Color.white, 0.3f);
+            // The filter bar's chips: as tall as the mod's search box beside them, with its
+            // margins and corners, so the two line up.
+            FilterChip = new GUIStyle(Chip);
+            FilterChip.normal.background = Rounded(ButtonBg, 15, null);
+            FilterChip.hover.background = Rounded(ButtonHover, 15, null);
+            FilterChip.border = SidebarFilter.border;
+            FilterChip.fixedHeight = SidebarFilter.fixedHeight;
+            FilterChip.margin = Offset(U(2), U(2), SidebarFilter.margin.top, SidebarFilter.margin.bottom);
+            FilterChip.padding = Offset(U(14), U(14), 0, 0);
+            FilterChipOn = new GUIStyle(FilterChip);
+            FilterChipOn.normal.background = Rounded(AccentSoft, 15, Accent);
+            FilterChipOn.hover.background = FilterChipOn.normal.background;
+            FilterChipOn.normal.textColor = ChipOn.normal.textColor;
+            FilterChipOn.hover.textColor = ChipOn.hover.textColor;
             TrackOn = Make(null, Rounded(Accent, 11, null), 11);
             TrackOff = Make(null, Rounded(TrackOffColor, 11, null), 11);
 
@@ -412,7 +426,7 @@ namespace BetterBepInEx
 
             // Last, once every style has its font and padding: the corners of the short styles
             // are fitted to the size they are drawn at.
-            foreach (GUIStyle s in new[] { Badge, BadgeDanger, BadgeMuted, Tag, Chip, ChipOn, GuiSkin.toggle, SearchField, SidebarFilter })
+            foreach (GUIStyle s in new[] { Badge, BadgeDanger, BadgeMuted, Tag, Chip, ChipOn, FilterChip, FilterChipOn, GuiSkin.toggle, SearchField, SidebarFilter })
             {
                 FitCorners(s, s.fixedHeight > 0f ? s.fixedHeight : s.CalcHeight(SampleText, 1000f), 0f);
             }
