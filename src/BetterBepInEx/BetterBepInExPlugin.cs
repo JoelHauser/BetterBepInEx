@@ -46,13 +46,14 @@ namespace BetterBepInEx
         internal ConfigEntry<bool> ShowHidden;
         internal ConfigEntry<float> MenuScale;
         internal ConfigEntry<bool> ScaleWithScreen;
-        internal ConfigEntry<bool> UseGameFont;
+        internal ConfigEntry<MenuFont> FontChoice;
         internal ConfigEntry<bool> ResetWindow;
         internal ConfigEntry<string> WindowRect;
         internal ConfigEntry<string> Favorites;
         internal ConfigEntry<string> LastPage;
         internal ConfigEntry<MenuTheme> Theme;
         internal ConfigEntry<Color> AccentColor;
+        internal ConfigEntry<Color> HeaderColor;
         internal ConfigEntry<float> TextSize;
         internal ConfigEntry<bool> CompactRows;
         internal ConfigEntry<ModSort> SortMods;
@@ -69,8 +70,9 @@ namespace BetterBepInEx
 
         /// <summary>The <see cref="StockManager.Signature"/> the model was last built at; -1 before the first build.</summary>
         private long _builtSignature = -1;
-        private Font _gameFont;
-        private bool _gameFontSearched;
+        private Font _font;
+        private bool _fontLoaded;
+        private readonly Dictionary<MenuFont, Font> _osFonts = new Dictionary<MenuFont, Font>();
 
         /// <summary>True when this menu is drawing in place of the stock window.</summary>
         internal static bool Active => Instance != null && Instance._ready && Instance.UseNewMenu.Value;
@@ -103,6 +105,11 @@ namespace BetterBepInEx
                 "The menu's colours. Black suits OLED screens; High contrast is easiest to read.");
             AccentColor = Config.Bind("Look", "Accent color", new Color(0.839f, 0.718f, 0.431f, 1f),
                 "The colour of switches, sliders, badges and the selected mod. EFT's tan by default.");
+            // A soft lavender blue: calm on every theme, and apart from both the tan default accent
+            // and the blues and cyans players pick for it.
+            HeaderColor = Config.Bind("Look", "Category header color", new Color(0.663f, 0.706f, 0.91f, 1f),
+                "The colour of the headings that divide a mod's settings into categories, so you can tell "
+                + "at a glance which category you are in.");
             TextSize = Config.Bind("Look", "Text size", 1f, new ConfigDescription(
                 "Size of the text, on top of Menu scale: bigger text in the same window, or smaller.",
                 new AcceptableValueRange<float>(0.8f, 1.5f)));
@@ -117,9 +124,11 @@ namespace BetterBepInEx
             ScaleWithScreen = Config.Bind("Look", "Scale with screen resolution", true,
                 "Size the menu for your resolution, so it reads the same at 1080p, 1440p, ultrawide and 4K. "
                 + "Off draws it at 1080p size on any screen.");
-            UseGameFont = Config.Bind("Look", "Use the game font", false,
-                "Draw the menu in EFT's own font, if the game has it loaded. If the menu text disappears, "
-                + "set this back to false in BepInEx\\config\\" + PluginGuid + ".cfg.");
+            FontChoice = Config.Bind("Look", "Font", MenuFont.Default,
+                "The menu's font. Tarkov is EFT's own, if the game has it loaded; the others come with Windows. "
+                + "A font that can't be found falls back to Default. If the menu text disappears, set this back "
+                + "to Default in BepInEx\\config\\" + PluginGuid + ".cfg.");
+            CarryOverGameFont();
             ResetWindow = Config.Bind("Look", "Reset window position", false,
                 "Put the menu back in the middle of the screen at its default size.");
             ResetWindow.SettingChanged += (_, __) =>
@@ -130,7 +139,7 @@ namespace BetterBepInEx
                     _menu?.ResetWindow();
                 }
             };
-            UseGameFont.SettingChanged += (_, __) => _gameFontSearched = false;
+            FontChoice.SettingChanged += (_, __) => _fontLoaded = false;
             UseNewMenu.SettingChanged += (_, __) =>
             {
                 // The stock list is not built while this menu is on, so build it before the stock
@@ -318,26 +327,112 @@ namespace BetterBepInEx
         }
 
         /// <summary>
-        /// EFT's UI font, if "Use the game font" is on and the game has a dynamic Font asset by that
-        /// name loaded. Most of EFT's text is TextMeshPro, which IMGUI cannot use, so this may find
-        /// nothing; the default font is used then.
+        /// The chosen font, or null for IMGUI's default. Looked up once per choice: called every event.
         /// </summary>
-        internal Font GameFont()
+        internal Font MenuFontAsset()
         {
-            if (!UseGameFont.Value)
+            if (!_fontLoaded)
             {
-                return null;
+                _fontLoaded = true;
+                MenuFont choice = FontChoice.Value;
+                _font = choice == MenuFont.Default ? null : choice == MenuFont.Game ? FindGameFont() : OsFont(choice);
             }
-            if (!_gameFontSearched)
+            return _font;
+        }
+
+        /// <summary>
+        /// EFT's UI font, if the game has a dynamic Font asset by that name loaded. Most of EFT's
+        /// text is TextMeshPro, which IMGUI cannot use, so this may find nothing.
+        /// </summary>
+        private Font FindGameFont()
+        {
+            Font font = Resources.FindObjectsOfTypeAll<Font>()
+                .FirstOrDefault(f => f != null && f.dynamic && f.name.IndexOf(GameFontHint, StringComparison.OrdinalIgnoreCase) >= 0);
+            Logger.LogInfo(font == null
+                ? "No dynamic font named like '" + GameFontHint + "' is loaded; using the default font."
+                : "Using the game font '" + font.name + "'.");
+            return font;
+        }
+
+        /// <summary>
+        /// A font installed with Windows, made once and kept: EFT unloads unused assets on scene
+        /// changes, which would take it out from under the skin.
+        /// </summary>
+        private Font OsFont(MenuFont choice)
+        {
+            if (_osFonts.TryGetValue(choice, out Font cached) && cached != null)
             {
-                _gameFontSearched = true;
-                _gameFont = Resources.FindObjectsOfTypeAll<Font>()
-                    .FirstOrDefault(f => f != null && f.dynamic && f.name.IndexOf(GameFontHint, StringComparison.OrdinalIgnoreCase) >= 0);
-                Logger.LogInfo(_gameFont == null
-                    ? "No dynamic font named like '" + GameFontHint + "' is loaded; using the default font."
-                    : "Using the game font '" + _gameFont.name + "'.");
+                return cached;
             }
-            return _gameFont;
+            string family = OsFamily(choice);
+            Font font = null;
+            try
+            {
+                if (Font.GetOSInstalledFontNames().Any(n => string.Equals(n, family, StringComparison.OrdinalIgnoreCase)))
+                {
+                    font = Font.CreateDynamicFontFromOSFont(family, 16);
+                    font.hideFlags = HideFlags.HideAndDontSave;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Could not load the font '" + family + "': " + ex.Message);
+            }
+            Logger.LogInfo(font == null ? "The font '" + family + "' is not installed; using the default font." : "Using the font '" + family + "'.");
+            _osFonts[choice] = font;
+            return font;
+        }
+
+        private static string OsFamily(MenuFont choice)
+        {
+            switch (choice)
+            {
+                case MenuFont.SegoeUI:
+                    return "Segoe UI";
+                case MenuFont.Bahnschrift:
+                    return "Bahnschrift";
+                case MenuFont.Verdana:
+                    return "Verdana";
+                case MenuFont.Tahoma:
+                    return "Tahoma";
+                case MenuFont.Calibri:
+                    return "Calibri";
+                case MenuFont.Consolas:
+                    return "Consolas";
+                default:
+                    return "Arial";
+            }
+        }
+
+        /// <summary>
+        /// "Use the game font" was a switch before the font list. Carries an on over to Tarkov and
+        /// drops the old line from the .cfg, which BepInEx otherwise keeps writing back.
+        /// </summary>
+        private void CarryOverGameFont()
+        {
+            try
+            {
+                PropertyInfo orphansProperty = AccessTools.Property(typeof(ConfigFile), "OrphanedEntries");
+                if (!(orphansProperty?.GetValue(Config, null) is Dictionary<ConfigDefinition, string> orphans))
+                {
+                    return;
+                }
+                ConfigDefinition old = new ConfigDefinition("Look", "Use the game font");
+                if (!orphans.TryGetValue(old, out string value))
+                {
+                    return;
+                }
+                orphans.Remove(old);
+                if (string.Equals(value?.Trim(), "true", StringComparison.OrdinalIgnoreCase) && FontChoice.Value == MenuFont.Default)
+                {
+                    FontChoice.Value = MenuFont.Game;
+                }
+                Config.Save();
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Could not carry over the old game font setting: " + ex.Message);
+            }
         }
 
         private void OnDestroy()

@@ -5,7 +5,7 @@ A replacement for SPT's F12 mod settings menu. Same hotkey, same settings, a muc
 ## What you get
 
 - **Sidebar of mods** with favorites and a filter box.
-- **Search every setting** across all mods, or just the mod you're on.
+- **Search every setting** across all mods (Ctrl+F), or just the mod you're on.
 - **See what you changed**: changed settings are marked and listed on one page. Reset one, a
   whole mod, or everything.
 - **Undo and redo** with Ctrl+Z / Ctrl+Y.
@@ -14,6 +14,8 @@ A replacement for SPT's F12 mod settings menu. Same hotkey, same settings, a muc
   marked, and copies it so you can paste it straight into Discord when someone asks for your config.
 - **Smooth sliders and scrolling**, a resizable window, and text that scales with your screen.
 - **Show advanced** in the title bar for hidden and advanced settings.
+- **Make it yours**: five themes, eight fonts, your own accent color, a color for the category
+  headings inside a mod, text size and compact rows.
 - **Holds you still in raid** while the menu is open.
 
 Mods with their own custom settings controls keep working.

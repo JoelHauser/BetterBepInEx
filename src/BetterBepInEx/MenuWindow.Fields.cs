@@ -642,6 +642,11 @@ namespace BetterBepInEx
 
         private void ClosePopup()
         {
+            if (_popup != null)
+            {
+                // The popup had the window focus; without this no window has it once it is gone.
+                _focusWindow = true;
+            }
             _popup = null;
         }
 
@@ -962,15 +967,30 @@ namespace BetterBepInEx
 
         // ------------------------------------------------------------------ color
 
+        private static readonly GUIContent SwatchOpenLabel = new GUIContent(string.Empty, "Click to change the color");
+        private static readonly GUIContent SwatchCloseLabel = new GUIContent(string.Empty, "Click to close");
+
         private void DrawColor(Row row)
         {
             Color color = row.Setting.Get() is Color c ? c : Color.white;
+            bool expanded = _expandedColors.Contains(row);
             GUILayout.BeginHorizontal();
+            // The swatch is the button that opens the channel sliders: it is what players click.
             Rect swatch = GUILayoutUtility.GetRect(U(40), U(30), Opts(Opt.Size, U(40), U(30)));
+            if (GUI.Button(swatch, expanded ? SwatchCloseLabel : SwatchOpenLabel, GUIStyle.none))
+            {
+                if (!_expandedColors.Remove(row))
+                {
+                    _expandedColors.Add(row);
+                }
+                expanded = !expanded;
+            }
             if (Event.current.type == EventType.Repaint)
             {
-                _skin.Fill(swatch, Skin.InputBorder);
-                _skin.Fill(new Rect(swatch.x + 1, swatch.y + 1, swatch.width - 2, swatch.height - 2), new Color(color.r, color.g, color.b, 1f));
+                float edge = expanded ? Mathf.Max(2f, U(2)) : 1f;
+                Color border = expanded ? Skin.Accent : swatch.Contains(Event.current.mousePosition) ? Skin.InputHoverBorder : Skin.InputBorder;
+                _skin.Fill(swatch, border);
+                _skin.Fill(new Rect(swatch.x + edge, swatch.y + edge, swatch.width - edge * 2, swatch.height - edge * 2), new Color(color.r, color.g, color.b, 1f));
             }
             GUILayout.Space(U(6));
 
@@ -997,15 +1017,6 @@ namespace BetterBepInEx
             else if (!focused && _colorEditRow == row)
             {
                 _colorEditRow = null;
-            }
-
-            bool expanded = _expandedColors.Contains(row);
-            if (GUILayout.Button(Cached(expanded ? "Done" : "RGBA"), expanded ? _skin.ChipOn : _skin.Chip, NoExpand))
-            {
-                if (!_expandedColors.Remove(row))
-                {
-                    _expandedColors.Add(row);
-                }
             }
             GUILayout.EndHorizontal();
 

@@ -253,20 +253,30 @@ namespace BetterBepInEx
         public void OnGUI()
         {
             float scale = _plugin.EffectiveScale();
-            Font font = _plugin.GameFont();
+            Font font = _plugin.MenuFontAsset();
             SkinOptions options = new SkinOptions
             {
                 Theme = _plugin.Theme.Value,
                 Accent = _plugin.AccentColor.Value,
+                Header = _plugin.HeaderColor.Value,
                 TextScale = Mathf.Clamp(_plugin.TextSize.Value, 0.7f, 1.6f),
                 Compact = _plugin.CompactRows.Value,
             };
-            if (_skin.GuiSkin == null || !Mathf.Approximately(_skin.Scale, scale) || _skin.Font != font || !_skin.Options.SameAs(options))
+            bool resized = _skin.GuiSkin == null || !Mathf.Approximately(_skin.Scale, scale) || _skin.Font != font || !_skin.Options.SameSize(options);
+            if (resized || !_skin.Options.SameAs(options))
             {
                 _skin.Build(scale, font, options);
                 _countLabels.Clear();
-                _sideItemHeight = 0f;
-                ResetVirtualization();
+                // The listed blocks hold the old skin's heading styles; rebuild them with the new.
+                _listStamp++;
+                // A colour alone leaves every height as it was. Measuring again would draw the rows
+                // above the view offscreen, shifting control ids, and a colour slider mid-drag
+                // would lose the mouse.
+                if (resized)
+                {
+                    _sideItemHeight = 0f;
+                    ResetVirtualization();
+                }
             }
             GUI.skin = _skin.GuiSkin;
 
@@ -310,6 +320,12 @@ namespace BetterBepInEx
 
             HandleResize(e);
             HandlePopupOutsideClick(e);
+            if (!Passive && !IsCapturing && !_stock.StockCapturingKey)
+            {
+                // Here, not in the window: IMGUI sends key events only to the focused window, and
+                // that is often none (a closed popup takes the focus with it).
+                HandleKeys(e);
+            }
 
             if (!Passive)
             {
@@ -400,7 +416,6 @@ namespace BetterBepInEx
             try
             {
                 _focusedName = GUIUtility.keyboardControl == 0 ? string.Empty : GUI.GetNameOfFocusedControl();
-                HandleKeys(Event.current);
 
                 float titleHeight = _skin.T(34) + U(26);
                 float statusHeight = _skin.T(30);
@@ -491,6 +506,7 @@ namespace BetterBepInEx
             if (ctrl && e.keyCode == KeyCode.F)
             {
                 _focusSearch = true;
+                _focusWindow = true;
                 e.Use();
                 return;
             }

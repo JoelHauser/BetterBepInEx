@@ -22,8 +22,8 @@ A better F12 menu. Same key, same settings, in a window that's actually nice to 
 
 - **Every mod in a sidebar.** Favorites at the top, a filter box, and sorting by name, author,
   most changed, most settings or recently opened.
-- **Search everything.** Find any setting across all your mods as you type, or search inside the
-  mod you're on.
+- **Search everything** (Ctrl+F). Find any setting across all your mods as you type, or search
+  inside the mod you're on.
 - **See what you changed.** Changed settings are marked with a bar, and the Changed page lists
   every one across all mods. Reset one setting, a whole mod, or everything.
 - **Undo and redo** with Ctrl+Z and Ctrl+Y.
@@ -34,8 +34,8 @@ A better F12 menu. Same key, same settings, in a window that's actually nice to 
 - **Show advanced** reveals the settings mods hide or mark as advanced.
 - **Keep playing with it open.** Click outside the menu to fade it and get your mouse and keys back.
   Click it to come back. While it's in front during a raid, it holds you still, like the inventory.
-- **Make it yours.** Five themes (Dark, Black for OLED, Grey, High contrast, Tan), any accent
-  color, text size and compact rows.
+- **Make it yours.** Five themes (Dark, Black for OLED, Grey, High contrast, Tan), eight fonts,
+  any accent color, a color for the category headings inside a mod, text size and compact rows.
 - **Smooth sliders and scrolling**, a resizable window, and sizing that fits 1080p, 1440p,
   ultrawide and 4K.
 

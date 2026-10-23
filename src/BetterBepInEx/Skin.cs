@@ -22,18 +22,55 @@ namespace BetterBepInEx
         Tan,
     }
 
+    /// <summary>
+    /// The menu's font choices: IMGUI's default, EFT's own, and fonts that come with Windows 10
+    /// and 11. The descriptions are what the settings dropdown shows.
+    /// </summary>
+    public enum MenuFont
+    {
+        [System.ComponentModel.Description("Default")]
+        Default,
+
+        [System.ComponentModel.Description("Tarkov (Bender)")]
+        Game,
+
+        [System.ComponentModel.Description("Segoe UI")]
+        SegoeUI,
+
+        [System.ComponentModel.Description("Bahnschrift")]
+        Bahnschrift,
+
+        [System.ComponentModel.Description("Verdana")]
+        Verdana,
+
+        [System.ComponentModel.Description("Tahoma")]
+        Tahoma,
+
+        [System.ComponentModel.Description("Calibri")]
+        Calibri,
+
+        [System.ComponentModel.Description("Consolas")]
+        Consolas,
+    }
+
     /// <summary>Everything the skin is built from besides scale and font; a change rebuilds it.</summary>
     internal struct SkinOptions
     {
         public MenuTheme Theme;
         public Color Accent;
+        public Color Header;
         public float TextScale;
         public bool Compact;
 
         public bool SameAs(SkinOptions other)
         {
-            return Theme == other.Theme && Accent == other.Accent && Mathf.Approximately(TextScale, other.TextScale)
-                   && Compact == other.Compact;
+            return Theme == other.Theme && Accent == other.Accent && Header == other.Header && SameSize(other);
+        }
+
+        /// <summary>True when everything that sizes text and rows matches; the rest are colours.</summary>
+        public bool SameSize(SkinOptions other)
+        {
+            return Mathf.Approximately(TextScale, other.TextScale) && Compact == other.Compact;
         }
     }
 
@@ -56,7 +93,7 @@ namespace BetterBepInEx
         public static Color InputBg, InputBorder, InputHoverBorder, FieldHoverBg, SearchBg;
         public static Color ButtonBg, ButtonHover, ButtonActive;
         public static Color TextColor, SoftText, MutedColor;
-        public static Color Accent, AccentText, AccentSoft, Danger, DangerBg;
+        public static Color Accent, AccentText, AccentSoft, Danger, DangerBg, HeaderColor;
         public static Color TrackOffColor, KeycapBg, KeycapEdge, KeycapLip, TagBg, BadgeMutedBg, ScrollThumb;
         public static Color PopupBg, PopupBorder, TooltipBg;
 
@@ -99,7 +136,7 @@ namespace BetterBepInEx
             Scale = scale;
             _font = font;
             Options = options;
-            ApplyPalette(options.Theme, options.Accent);
+            ApplyPalette(options.Theme, options.Accent, options.Header);
             bool compact = options.Compact;
 
             GuiSkin = Object.Instantiate(GUI.skin);
@@ -150,7 +187,7 @@ namespace BetterBepInEx
             PageSubtitle.wordWrap = true;
             // Headings in the scrolling lists carry padding, never margins: a heading scrolled out
             // of view is replaced by a Space of its measured height, and margins are not measured.
-            SectionHeader = TextStyle(11, MutedColor, FontStyle.Bold);
+            SectionHeader = TextStyle(11, HeaderColor, FontStyle.Bold);
             SectionHeader.margin = Offset(0);
             SectionHeader.padding = Offset(U(6), 0, compact ? U(12) : U(20), compact ? U(6) : U(8));
             GroupHeader = TextStyle(14, Accent, FontStyle.Bold);
@@ -540,8 +577,8 @@ namespace BetterBepInEx
 
         private int FontSize(int basePx) => Mathf.Max(8, Mathf.RoundToInt(basePx * Scale * Options.TextScale));
 
-        /// <summary>Sets the static palette for a theme. The accent is the player's own colour.</summary>
-        private static void ApplyPalette(MenuTheme theme, Color accent)
+        /// <summary>Sets the static palette for a theme. The accent and header colours are the player's own.</summary>
+        private static void ApplyPalette(MenuTheme theme, Color accent, Color header)
         {
             Danger = Hex(0xE06C60);
             DangerBg = Hex(0x3A1F1C);
@@ -599,6 +636,8 @@ namespace BetterBepInEx
             float luminance = 0.299f * accent.r + 0.587f * accent.g + 0.114f * accent.b;
             AccentText = luminance > 0.55f ? Hex(0x17140C) : Color.white;
             AccentSoft = Color.Lerp(CardBg, accent, 0.18f);
+            header.a = 1f;
+            HeaderColor = header;
         }
 
         private static void Set(int window, int outline, int card, int cardBorder, int divider, int hover, int selected,
