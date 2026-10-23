@@ -30,7 +30,7 @@ namespace BetterBepInEx
         public const string PluginName = "BetterBepInEx";
 
         /// <summary>Must match the csproj's Version. Two places, and they have to agree.</summary>
-        public const string PluginVersion = "0.4.6";
+        public const string PluginVersion = "0.4.7";
 
         private const string GameFontHint = "Bender";
 
@@ -56,8 +56,6 @@ namespace BetterBepInEx
         internal ConfigEntry<float> TextSize;
         internal ConfigEntry<bool> CompactRows;
         internal ConfigEntry<ModSort> SortMods;
-        internal ConfigEntry<string> RenamedMods;
-        internal ConfigEntry<string> HiddenMods;
         internal ConfigEntry<string> RecentMods;
 
         private StockManager _stock;
@@ -147,8 +145,6 @@ namespace BetterBepInEx
             WindowRect = Config.Bind("Window", "Rect", string.Empty, new ConfigDescription("Window position and size, as fractions of the screen.", null, "Hidden"));
             Favorites = Config.Bind("Window", "Favorites", string.Empty, new ConfigDescription("GUIDs of favourite mods.", null, "Hidden"));
             LastPage = Config.Bind("Window", "Last page", string.Empty, new ConfigDescription("The page open when the menu closed.", null, "Hidden"));
-            RenamedMods = Config.Bind("Window", "Renamed mods", string.Empty, new ConfigDescription("Names given to mods in the list, one GUID and name per line.", null, "Hidden"));
-            HiddenMods = Config.Bind("Window", "Hidden mods", string.Empty, new ConfigDescription("GUIDs of mods hidden from the list.", null, "Hidden"));
             RecentMods = Config.Bind("Window", "Recent mods", string.Empty, new ConfigDescription("GUIDs of mods opened most recently, newest first.", null, "Hidden"));
 
             _stock = new StockManager();

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using BetterBepInEx.Core;
 using UnityEngine;
@@ -33,13 +33,7 @@ namespace BetterBepInEx
 
         private static readonly GUIContent FavoriteLabel = new GUIContent("Favorite", "Listed under Favorites at the top of the mods list. Click to remove it.");
         private static readonly GUIContent AddFavoriteLabel = new GUIContent("Add to favorites", "List this mod under Favorites at the top of the mods list");
-        private static readonly GUIContent HiddenFromListLabel = new GUIContent("Hidden from list", "You hid this mod from the mods list. Click to list it again.");
-        private static readonly GUIContent RenameLabel = new GUIContent("Rename", "Give this mod a different name in the list");
-        private static readonly GUIContent HideLabel = new GUIContent("Hide", "Hide this mod from the mods list");
         private static readonly GUIContent WebsiteLabel = new GUIContent("Website", "Open this mod's website");
-        private static readonly GUIContent CopyLabel = new GUIContent("Copy", "Copy this mod's settings as text");
-        private static readonly GUIContent PasteLabel = new GUIContent("Paste", "Apply settings copied from this menu to this mod");
-        private static readonly GUIContent PasteAllLabel = new GUIContent("Paste", "Apply settings copied from this menu, for every mod they cover");
 
         /// <summary>What a list was last built from. The same again means the same rows, so it is not built again.</summary>
         private struct ListSource
@@ -221,7 +215,7 @@ namespace BetterBepInEx
             // all ghost buttons of one height, so they line up.
             GUILayout.BeginHorizontal();
             GUILayout.BeginVertical();
-            DrawPageTitle(page);
+            Header(page.Title, page.Subtitle);
             GUILayout.EndVertical();
             GUILayout.Space(U(12));
 
@@ -230,25 +224,9 @@ namespace BetterBepInEx
             {
                 ToggleFavorite(page);
             }
-            if (_renaming != page && GUILayout.Button(RenameLabel, _skin.Ghost, NoExpand))
-            {
-                StartRename(page);
-            }
-            if (GUILayout.Button(page.UserHidden ? HiddenFromListLabel : HideLabel, page.UserHidden ? _skin.GhostOn : _skin.Ghost, NoExpand))
-            {
-                ToggleUserHidden(page);
-            }
             if (page.Website != null && GUILayout.Button(WebsiteLabel, _skin.Ghost, NoExpand))
             {
                 Application.OpenURL(page.Website);
-            }
-            if (GUILayout.Button(CopyLabel, _skin.Ghost, NoExpand))
-            {
-                CopyRows(page.Rows, page.DisplayName + " " + page.Version);
-            }
-            if (GUILayout.Button(PasteLabel, _skin.Ghost, NoExpand))
-            {
-                Paste(page);
             }
             GUI.enabled = page.ChangedCount > 0;
             if (Confirm(page, "Reset mod", "Reset ", page.ChangedCount, _skin.GhostDanger, NoExpand))
@@ -302,15 +280,7 @@ namespace BetterBepInEx
             Header(Cached("Changed settings"), Cached("Every setting that is not at its default, across all mods."));
             GUILayout.EndVertical();
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button(PasteAllLabel, _skin.Ghost, NoExpand))
-            {
-                Paste(null);
-            }
             GUI.enabled = _model.ChangedCount > 0;
-            if (GUILayout.Button(Cached("Copy"), _skin.Ghost, NoExpand))
-            {
-                CopyRows(_model.ChangedRows, "changed settings");
-            }
             if (Confirm(PageChanged, "Reset all", "Reset all ", _model.ChangedCount, _skin.GhostDanger, NoExpand))
             {
                 ResetRows(new List<Row>(_model.ChangedRows), "reset every mod");
@@ -818,31 +788,6 @@ namespace BetterBepInEx
             _anchorRow = _blocks[row].Row;
             _anchorPaged = _blocks[row].PageName;
             _anchorOffset = scroll - _virtual.DisplayedTop(row);
-        }
-
-        private void CopyRows(IEnumerable<Row> rows, string what)
-        {
-            List<SettingsText.Record> records = new List<SettingsText.Record>(SettingsClipboard.Records(rows));
-            GUIUtility.systemCopyBuffer = SettingsText.Write(records, "Copied from " + what + ", " + DateTime.Now.ToString("yyyy-MM-dd HH:mm"));
-            SetStatus("Copied " + records.Count + Plural(records.Count, " setting", " settings") + " to the clipboard.");
-        }
-
-        private void Paste(Page onlyPage)
-        {
-            CommitEdit();
-            string text = GUIUtility.systemCopyBuffer;
-            if (!SettingsText.LooksLikeSettings(text))
-            {
-                SetStatus("The clipboard does not hold settings copied from this menu.", true);
-                return;
-            }
-            SettingsClipboard.Result r = SettingsClipboard.Apply(text, _model, onlyPage == null ? "pasting settings" : "pasting into " + onlyPage.DisplayName, onlyPage);
-            if (onlyPage != null && r.Applied == 0 && r.Unchanged == 0 && r.Unknown > 0)
-            {
-                SetStatus("The clipboard holds settings for other mods, not " + onlyPage.DisplayName + ". Paste on the Changed settings page applies them all.", true);
-                return;
-            }
-            SetStatus(Describe(r, "Pasted: changed"));
         }
 
         private void ResetRows(List<Row> rows, string label)

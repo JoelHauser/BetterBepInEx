@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using BepInEx.Configuration;
@@ -185,8 +185,7 @@ namespace BetterBepInEx
 
         public void OnModelRebuilt()
         {
-            _renaming = null;
-            ApplyCustomizations();
+            _sortDirty = true;
             _searchDirty = true;
             _searchResultsFor = null;
             _listStamp++;
@@ -243,10 +242,6 @@ namespace BetterBepInEx
             SaveRect();
             _plugin.LastPage.Value = _page ?? string.Empty;
             SaveRecent();
-            if (_renaming != null)
-            {
-                CommitRename();
-            }
             // The skin is kept: rebuilding its textures is most of what reopening would cost.
         }
 
@@ -465,13 +460,6 @@ namespace BetterBepInEx
             bool ctrl = e.control || e.command;
             bool typing = GUIUtility.keyboardControl != 0;
 
-            if ((e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter) && _renaming != null)
-            {
-                CommitRename();
-                GUIUtility.keyboardControl = 0;
-                e.Use();
-                return;
-            }
             if ((e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter) && _editingRow != null)
             {
                 CommitEdit();
@@ -840,9 +828,21 @@ namespace BetterBepInEx
             _sideShown = 0;
             bool byAuthor = _sortedBy == ModSort.Author;
             GUIContent lastAuthor = null;
+
+            // This menu's own settings head the list, in the accent, whatever the sort: the
+            // first place anyone looks for how to change the menu.
+            if (_model.PagesByGuid.TryGetValue(BetterBepInExPlugin.PluginGuid, out Page own) && SidebarShows(own, filter))
+            {
+                _sideEntries.Add(new SideEntry { Page = own });
+                _sideShown++;
+                if (_favorites.Contains(own.Guid))
+                {
+                    _sideFavorites.Add(own);
+                }
+            }
             foreach (Page page in pages)
             {
-                if (!SidebarShows(page, filter))
+                if (page == own || !SidebarShows(page, filter))
                 {
                     continue;
                 }
@@ -910,7 +910,8 @@ namespace BetterBepInEx
         private void SidebarPage(Page page)
         {
             bool selected = _query.IsEmpty && _page == page.Guid;
-            if (SidebarButton(page.SidebarLabel, selected, page.ChangedCount, _skin.BadgeMuted, ListHidden(page)))
+            if (SidebarButton(page.SidebarLabel, selected, page.ChangedCount, _skin.BadgeMuted, ListHidden(page),
+                    page.Guid == BetterBepInExPlugin.PluginGuid))
             {
                 Select(page.Guid);
             }
@@ -929,7 +930,7 @@ namespace BetterBepInEx
         /// One line of the sidebar. It takes its fixed height plus the gap below it, with no
         /// margins, so a run of lines out of view is exactly a Space of their count times that.
         /// </summary>
-        private bool SidebarButton(GUIContent label, bool selected, int count, GUIStyle badgeStyle, bool dimmed)
+        private bool SidebarButton(GUIContent label, bool selected, int count, GUIStyle badgeStyle, bool dimmed, bool own = false)
         {
             Rect slot = GUILayoutUtility.GetRect(1f, SideItemStep, GUIStyle.none, Expand);
             Rect r = new Rect(slot.x, slot.y, slot.width, _sideItemHeight);
@@ -963,7 +964,7 @@ namespace BetterBepInEx
                 badgeStyle.Draw(new Rect(r.xMax - size.x - U(8), r.y + (r.height - size.y) / 2f, size.x, size.y), badge, false, false, false, false);
             }
             Rect text = new Rect(r.x, r.y, r.width - badgeWidth, r.height);
-            GUIStyle textStyle = selected ? _skin.SidebarTextActive : dimmed ? _skin.SidebarTextHidden : _skin.SidebarText;
+            GUIStyle textStyle = own ? _skin.SidebarTextOwn : selected ? _skin.SidebarTextActive : dimmed ? _skin.SidebarTextHidden : _skin.SidebarText;
             textStyle.Draw(text, label, hover, false, false, false);
             return clicked;
         }
@@ -979,7 +980,6 @@ namespace BetterBepInEx
             if (_page != page)
             {
                 _filter = RowFilter.All;
-                _renaming = null;
             }
             _page = page;
             if (!page.StartsWith("@", StringComparison.Ordinal))
@@ -1280,24 +1280,6 @@ namespace BetterBepInEx
         }
 
         // ------------------------------------------------------------------ helpers
-
-        private static string Describe(SettingsClipboard.Result r, string verb)
-        {
-            string text = verb + " " + r.Applied + (r.Applied == 1 ? " setting" : " settings");
-            if (r.Unknown > 0)
-            {
-                text += ", skipped " + r.Unknown + " for mods that are not installed";
-            }
-            if (r.Failed > 0)
-            {
-                text += ", " + r.Failed + " could not be read";
-            }
-            if (r.Malformed > 0)
-            {
-                text += ", " + r.Malformed + " unreadable lines";
-            }
-            return text + (r.Applied > 0 ? ". Ctrl+Z undoes it." : ".");
-        }
 
         internal static string ShortcutText(object value)
         {

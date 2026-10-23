@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -102,8 +102,6 @@ namespace BetterBepInEx
         /// <summary>The value as of the last change this model saw, so the next change knows what it replaced.</summary>
         public object LastValue;
 
-        /// <summary>Clipboard id: GUID, section and key. Null when there is no config entry.</summary>
-        public string Id;
 
         /// <summary>
         /// The value's text as the row's field shows it, and the value it was made from. Formatting
@@ -167,14 +165,8 @@ namespace BetterBepInEx
         public string Guid;
         public string DisplayName;
 
-        /// <summary>The readable name worked out from the plugin's own; what a rename falls back to.</summary>
-        public string AutoName;
 
-        /// <summary>The name the player gave this mod, or null.</summary>
-        public string CustomName;
 
-        /// <summary>Hidden from the mods list by the player (shown again by "Show hidden mods").</summary>
-        public bool UserHidden;
 
         public string BaseSubtitle;
         public string OriginalName;
@@ -216,7 +208,6 @@ namespace BetterBepInEx
         public readonly List<Page> Pages = new List<Page>();
         public readonly Dictionary<string, Page> PagesByGuid = new Dictionary<string, Page>();
         public readonly List<Row> AllRows = new List<Row>();
-        public readonly Dictionary<string, Row> RowsById = new Dictionary<string, Row>();
         public readonly UndoHistory<Row> History = new UndoHistory<Row>();
 
         /// <summary>Rows that share a keybind with at least one other row, mapped to the others.</summary>
@@ -258,7 +249,6 @@ namespace BetterBepInEx
             Pages.Clear();
             PagesByGuid.Clear();
             AllRows.Clear();
-            RowsById.Clear();
             _rowsByEntry.Clear();
             // The rows undo points at are being replaced, so their history goes with them. This
             // only happens when the set of settings changed, not on every open.
@@ -288,10 +278,6 @@ namespace BetterBepInEx
                 {
                     _rowsByEntry[row.Entry] = row;
                     Watch(row.Entry.ConfigFile);
-                    if (row.Id != null)
-                    {
-                        RowsById[row.Id] = row;
-                    }
                 }
             }
 
@@ -352,7 +338,6 @@ namespace BetterBepInEx
             {
                 Guid = info.GUID,
                 DisplayName = display,
-                AutoName = display,
                 OriginalName = info.Name ?? string.Empty,
                 SortKey = DisplayNames.SortKey(display),
                 Version = info.Version == null ? string.Empty : info.Version.ToString(),
@@ -386,7 +371,6 @@ namespace BetterBepInEx
                 ControlName = "bbeRow" + AllRows.Count,
                 IsAdvanced = setting.IsAdvanced == true,
                 IsReadOnly = setting.ReadOnly == true,
-                Id = entry == null ? null : SettingsText.MakeId(page.Guid, entry.Definition.Section, entry.Definition.Key),
             };
             row.CanReset = !setting.HideDefaultButton && (setting.DefaultValue != null || setting.SettingType.IsClass)
                            && !row.IsReadOnly;

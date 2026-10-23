@@ -9,7 +9,7 @@
     <Nullable>disable</Nullable>
 
     <!-- Must match BetterBepInExPlugin.PluginVersion. -->
-    <Version>0.4.6</Version>
+    <Version>0.4.7</Version>
 
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>

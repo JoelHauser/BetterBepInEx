@@ -69,10 +69,10 @@ namespace BetterBepInEx
         public GUIStyle Window, Sidebar, Card, TitleBar;
         public GUIStyle Title, PageTitle, PageSubtitle, SectionHeader, GroupHeader, GroupHeaderDanger;
         public GUIStyle Label, Muted, Small, Description, DangerText, Badge, BadgeDanger, BadgeMuted, Tag;
-        public GUIStyle SidebarItem, SidebarText, SidebarTextActive, SidebarTextHidden, SidebarHeader, SidebarSelected, SidebarToggle, SidebarFilter, SidebarHiddenToggle;
+        public GUIStyle SidebarItem, SidebarText, SidebarTextActive, SidebarTextHidden, SidebarTextOwn, SidebarHeader, SidebarSelected, SidebarToggle, SidebarFilter, SidebarHiddenToggle;
         public GUIStyle CardTop, CardMid, CardBottom, CardSingle, RowHover, ShadowStyle, KeyHint, KeyHintActive;
         public GUIStyle Button, ButtonAccent, ButtonDanger, Ghost, GhostOn, GhostDanger, IconButton, LinkButton, Dropdown, HeaderToggle, ClearGlyph;
-        public GUIStyle RenameField, TextField, SearchField, NumberField, KeyField, KeyFieldActive, Keycap, KeyPlus;
+        public GUIStyle TextField, SearchField, NumberField, KeyField, KeyFieldActive, Keycap, KeyPlus;
         public GUIStyle Chip, ChipOn, TrackOn, TrackOff;
         public GUIStyle RowStyle, Popup, PopupItem, PopupItemActive, Status, Tooltip;
         public GUIStyle Slider, SliderThumb, SliderTrack, SliderFill;
@@ -199,6 +199,10 @@ namespace BetterBepInEx
             SidebarTextActive = new GUIStyle(SidebarText) { fontStyle = FontStyle.Bold };
             SidebarTextHidden = new GUIStyle(SidebarText) { fontStyle = FontStyle.Italic };
             SidebarTextHidden.normal.textColor = MutedColor;
+            // This menu's own entry: bold, in the accent, so it stands out among the mods.
+            SidebarTextOwn = new GUIStyle(SidebarText) { fontStyle = FontStyle.Bold };
+            SidebarTextOwn.normal.textColor = Accent;
+            SidebarTextOwn.hover.textColor = Color.Lerp(Accent, Color.white, 0.3f);
             SidebarTextActive.normal.textColor = TextColor;
             SidebarHeader = TextStyle(10, MutedColor, FontStyle.Bold);
             SidebarHeader.padding = Offset(U(14), 0, U(16), U(6));
@@ -296,8 +300,7 @@ namespace BetterBepInEx
             SearchField.padding = Offset(U(38), U(36), U(7), U(7));
             NumberField = new GUIStyle(TextField);
             NumberField.alignment = TextAnchor.MiddleRight;
-            RenameField = new GUIStyle(TextField) { fontSize = FontSize(18), fontStyle = FontStyle.Bold };
-            RenameField.fixedHeight = T(38);
+
             SidebarFilter = new GUIStyle(SearchField);
             SidebarFilter.fontSize = FontSize(13);
             SidebarFilter.fixedHeight = T(30);
