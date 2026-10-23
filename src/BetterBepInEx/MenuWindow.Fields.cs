@@ -165,38 +165,63 @@ namespace BetterBepInEx
 
             GUILayout.BeginHorizontal();
             Rect r = GUILayoutUtility.GetRect(U(80), U(30), _skin.Slider, Expand);
-            if (Event.current.type == EventType.Repaint)
+            float thumb = _skin.SliderThumb.fixedWidth;
+            float left = r.x + thumb / 2f;
+            float width = Mathf.Max(1f, r.width - thumb);
+            bool sliding = _slideRow == row;
+
+            // Handled here rather than by GUI.HorizontalSlider: a press anywhere on the track takes
+            // the thumb there and keeps hold of it, and the thumb follows the mouse exactly while
+            // the setting gets the rounded value. The drag is held by row as well as by control id,
+            // so nothing appearing above it mid-drag (the Reset link) can make it let go.
+            int id = GUIUtility.GetControlID(SliderHint, FocusType.Passive, r);
+            Event e = Event.current;
+            switch (sliding ? e.type : e.GetTypeForControl(id))
             {
-                float thumb = _skin.SliderThumb.fixedWidth;
+                case EventType.MouseDown when e.button == 0 && GUI.enabled && max > min && r.Contains(e.mousePosition):
+                    BeginSlide(row);
+                    GUIUtility.hotControl = id;
+                    sliding = true;
+                    SlideTo(row, Mathf.Lerp(min, max, Mathf.Clamp01((e.mousePosition.x - left) / width)), min, max, type, value);
+                    e.Use();
+                    break;
+                case EventType.MouseDrag when sliding:
+                    GUIUtility.hotControl = id;
+                    SlideTo(row, Mathf.Lerp(min, max, Mathf.Clamp01((e.mousePosition.x - left) / width)), min, max, type, value);
+                    e.Use();
+                    break;
+                case EventType.MouseUp when sliding:
+                    if (GUIUtility.hotControl == id)
+                    {
+                        GUIUtility.hotControl = 0;
+                    }
+                    EndSlide();
+                    sliding = false;
+                    e.Use();
+                    break;
+            }
+
+            if (e.type == EventType.Repaint)
+            {
+                float shown = sliding ? _slideValue : current;
+                float frac = max > min ? Mathf.Clamp01((shown - min) / (max - min)) : 0f;
                 float trackHeight = U(6);
-                float left = r.x + thumb / 2f;
-                float width = r.width - thumb;
-                float frac = max > min ? Mathf.Clamp01((current - min) / (max - min)) : 0f;
                 Rect track = new Rect(left, r.y + (r.height - trackHeight) / 2f, width, trackHeight);
+                Color old = GUI.color;
+                if (!GUI.enabled)
+                {
+                    GUI.color = new Color(1f, 1f, 1f, 0.4f * old.a);
+                }
                 _skin.SliderTrack.Draw(track, false, false, false, false);
                 if (frac > 0f)
                 {
-                    Color old = GUI.color;
-                    if (!GUI.enabled)
-                    {
-                        GUI.color = new Color(1f, 1f, 1f, 0.4f * old.a);
-                    }
                     _skin.SliderFill.Draw(new Rect(track.x, track.y, Mathf.Max(trackHeight, width * frac), trackHeight), false, false, false, false);
-                    GUI.color = old;
                 }
-            }
-            float slid = GUI.HorizontalSlider(r, current, min, max, _skin.Slider, _skin.SliderThumb);
-            if (!Mathf.Approximately(slid, current))
-            {
-                object converted = FromFloat(Step(slid, min, max, type), type);
-                if (converted != null && !Equals(converted, value))
-                {
-                    if (_editingRow == row)
-                    {
-                        _editingRow = null;
-                    }
-                    _model.Write(row, converted);
-                }
+                float knob = r.height - _skin.Slider.padding.vertical;
+                Rect thumbRect = new Rect(Mathf.Round(left + width * frac - thumb / 2f), r.y + _skin.Slider.padding.top, thumb, knob);
+                bool hover = GUI.enabled && !ListMoving && r.Contains(e.mousePosition);
+                _skin.SliderThumb.Draw(thumbRect, hover || sliding, sliding, false, false);
+                GUI.color = old;
             }
             if (row.Setting.ShowRangeAsPercent == true)
             {
@@ -228,6 +253,81 @@ namespace BetterBepInEx
             float step = Mathf.Pow(10f, Mathf.Floor(Mathf.Log10(range)) - 2f);
             float rounded = Mathf.Round(value / step) * step;
             return Mathf.Clamp((float)Math.Round(rounded, 6), Mathf.Min(min, max), Mathf.Max(min, max));
+        }
+
+        private static readonly int SliderHint = "BetterBepInEx.Slider".GetHashCode();
+
+        /// <summary>The row whose slider is held, and where its thumb is: the mouse's value, not yet rounded.</summary>
+        private Row _slideRow;
+        private float _slideValue;
+        private object _slideWritten;
+        private bool _slideShowReset;
+        private ConfigFile _slideFile;
+        private bool _slideFileSaved;
+
+        private void BeginSlide(Row row)
+        {
+            EndSlide();
+            CommitEdit();
+            ClosePopup();
+            _slideRow = row;
+            _slideWritten = null;
+            _slideShowReset = row.IsChanged && row.CanReset;
+            // The mod's .cfg is written once, on release, not on every step of the drag: BepInEx
+            // saves the whole file on each change, which stutters a drag.
+            _slideFile = row.Entry?.ConfigFile;
+            if (_slideFile != null)
+            {
+                _slideFileSaved = _slideFile.SaveOnConfigSet;
+                _slideFile.SaveOnConfigSet = false;
+            }
+            // The whole drag is one undo step.
+            _model.History.BeginGroup(row.Name.text);
+        }
+
+        /// <summary>Moves the thumb to <paramref name="raw"/>, and the setting to its rounded value when that changes.</summary>
+        private void SlideTo(Row row, float raw, float min, float max, Type type, object value)
+        {
+            _slideValue = raw;
+            object converted = FromFloat(Step(raw, min, max, type), type);
+            if (converted == null || Equals(converted, _slideWritten ?? value))
+            {
+                return;
+            }
+            if (_editingRow == row)
+            {
+                _editingRow = null;
+            }
+            _model.Write(row, converted);
+            _slideWritten = converted;
+        }
+
+        private void EndSlide()
+        {
+            if (_slideRow == null)
+            {
+                return;
+            }
+            _slideRow = null;
+            _model.History.EndGroup();
+            ConfigFile file = _slideFile;
+            _slideFile = null;
+            if (file == null)
+            {
+                return;
+            }
+            file.SaveOnConfigSet = _slideFileSaved;
+            if (_slideWritten != null && _slideFileSaved)
+            {
+                try
+                {
+                    file.Save();
+                }
+                catch (Exception e)
+                {
+                    BetterBepInExPlugin.Log.LogWarning("Could not save " + file.ConfigFilePath + ": " + e.Message);
+                }
+            }
         }
 
         private static float ToFloat(object value)
@@ -698,6 +798,11 @@ namespace BetterBepInEx
         /// </summary>
         public void Update()
         {
+            // A release the slider never saw (let go outside the game window, say) still ends the drag.
+            if (_slideRow != null && !UnityInput.Current.GetMouseButton(0))
+            {
+                EndSlide();
+            }
             if (_capturing == null)
             {
                 return;

@@ -209,6 +209,7 @@ namespace BetterBepInEx
 
         private void EnterBackground()
         {
+            EndSlide();
             CommitEdit();
             CancelCapture();
             ClosePopup();
@@ -234,6 +235,7 @@ namespace BetterBepInEx
 
         public void OnClose()
         {
+            EndSlide();
             CommitEdit();
             CancelCapture();
             ClosePopup();
@@ -271,7 +273,12 @@ namespace BetterBepInEx
             GUI.skin = _skin.GuiSkin;
 
             EnsureRect();
-            _model.RefreshIfDirty(ShowHidden);
+            // Not mid-drag: a slider passing its default would add or drop its row from the
+            // Changed page and the counts under the mouse. It all catches up on release.
+            if (_slideRow == null)
+            {
+                _model.RefreshIfDirty(ShowHidden);
+            }
             if (_searchDirty)
             {
                 RebuildSearch();

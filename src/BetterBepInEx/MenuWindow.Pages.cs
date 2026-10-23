@@ -901,7 +901,10 @@ namespace BetterBepInEx
             }
             GUILayout.BeginHorizontal();
             GUILayout.Label(_plugin.ShowDescriptions.Value ? row.NamePlain : row.Name, _skin.Label);
-            if (row.IsChanged && row.CanReset)
+            // While its slider is held, the row keeps the Reset link it had when the drag began:
+            // one appearing mid-drag would move the slider under the mouse.
+            bool showReset = _slideRow == row ? _slideShowReset : row.IsChanged && row.CanReset;
+            if (showReset)
             {
                 if (row.ResetLabel == null)
                 {
