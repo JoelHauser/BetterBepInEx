@@ -30,7 +30,7 @@ namespace BetterBepInEx
         public const string PluginName = "BetterBepInEx";
 
         /// <summary>Must match the csproj's Version. Two places, and they have to agree.</summary>
-        public const string PluginVersion = "0.4.10";
+        public const string PluginVersion = "0.4.11";
 
         private const string GameFontHint = "Bender";
 
@@ -142,7 +142,9 @@ namespace BetterBepInEx
             };
 
             // Kept between sessions; the "Hidden" tag keeps them off the menu's own page.
-            WindowRect = Config.Bind("Window", "Rect", string.Empty, new ConfigDescription("Window position and size, as fractions of the screen.", null, "Hidden"));
+            // "Position", not the old "Rect": 0.4.11 made the window narrower, and a new key lets
+            // every saved (wider) window start once at the new size. Resizing is kept as before.
+            WindowRect = Config.Bind("Window", "Position", string.Empty, new ConfigDescription("Window position and size, as fractions of the screen.", null, "Hidden"));
             Favorites = Config.Bind("Window", "Favorites", string.Empty, new ConfigDescription("GUIDs of favourite mods.", null, "Hidden"));
             LastPage = Config.Bind("Window", "Last page", string.Empty, new ConfigDescription("The page open when the menu closed.", null, "Hidden"));
             RecentMods = Config.Bind("Window", "Recent mods", string.Empty, new ConfigDescription("GUIDs of mods opened most recently, newest first.", null, "Hidden"));

@@ -412,7 +412,7 @@ namespace BetterBepInEx
                 Rect content = new Rect(sidebarWidth + 1, titleHeight, _rect.width - sidebarWidth - 1, _rect.height - titleHeight - statusHeight);
                 float padX = U(24);
                 _rowWidth = content.width - padX - U(16) - U(12);
-                _valueWidth = Mathf.Clamp(_rowWidth * 0.40f, U(240), U(460));
+                _valueWidth = Mathf.Clamp(_rowWidth * 0.36f, U(220), U(400));
                 UpdateStockGeometry();
 
                 GUILayout.BeginArea(new Rect(content.x + padX, content.y + U(16), content.width - padX - U(10), content.height - U(16)));
@@ -1151,10 +1151,14 @@ namespace BetterBepInEx
             ClampRect();
         }
 
-        /// <summary>Centred, 84% of the screen's height, and as wide as the layout uses at this scale.</summary>
+        /// <summary>
+        /// Centred, 84% of the screen's height, and as wide as the layout uses at this scale: a
+        /// setting's name and description beside its control, without a gap between them. Wider
+        /// only spread the rows out (0.4.10 was 1320 at 1080p scale, or 55% of a wide screen).
+        /// </summary>
         private Rect DefaultRect()
         {
-            float w = Mathf.Min(Screen.width * 0.9f, Mathf.Max(Screen.width * 0.55f, U(1320)));
+            float w = Mathf.Min(Screen.width * 0.9f, U(1160));
             float h = Screen.height * 0.84f;
             return new Rect((Screen.width - w) / 2f, (Screen.height - h) / 2f, w, h);
         }
