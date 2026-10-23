@@ -828,21 +828,9 @@ namespace BetterBepInEx
             _sideShown = 0;
             bool byAuthor = _sortedBy == ModSort.Author;
             GUIContent lastAuthor = null;
-
-            // This menu's own settings head the list, in the accent, whatever the sort: the
-            // first place anyone looks for how to change the menu.
-            if (_model.PagesByGuid.TryGetValue(BetterBepInExPlugin.PluginGuid, out Page own) && SidebarShows(own, filter))
-            {
-                _sideEntries.Add(new SideEntry { Page = own });
-                _sideShown++;
-                if (_favorites.Contains(own.Guid))
-                {
-                    _sideFavorites.Add(own);
-                }
-            }
             foreach (Page page in pages)
             {
-                if (page == own || !SidebarShows(page, filter))
+                if (!SidebarShows(page, filter))
                 {
                     continue;
                 }
