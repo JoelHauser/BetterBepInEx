@@ -330,6 +330,16 @@ namespace BetterBepInEx
                 _focusWindow = false;
             }
 
+            // A release the slider itself did not get (let go over another window, or outside the
+            // game) still ends the drag. Read from the GUI event, never from Input: the
+            // ResetInputAxes below makes Input report the button up every frame, which ended
+            // every drag one frame after it began (0.4.6 to 0.4.9).
+            if (_slideRow != null && e.rawType == EventType.MouseUp)
+            {
+                GUIUtility.hotControl = 0;
+                EndSlide();
+            }
+
             if (!IsCapturing && !_stock.StockCapturingKey && !Passive && _inputResetFrame != Time.frameCount)
             {
                 // Once a frame: it holds for the rest of the frame, and OnGUI runs several times.

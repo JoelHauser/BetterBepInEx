@@ -848,11 +848,6 @@ namespace BetterBepInEx
         /// </summary>
         public void Update()
         {
-            // A release the slider never saw (let go outside the game window, say) still ends the drag.
-            if (_slideRow != null && !UnityInput.Current.GetMouseButton(0))
-            {
-                EndSlide();
-            }
             ApplyRestingSlide();
             if (_capturing == null)
             {
