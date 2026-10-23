@@ -30,6 +30,38 @@ public class SearchAndNamesTests
     }
 
     [Theory]
+    [InlineData("loo", "loot", true)]
+    [InlineData("loot", "loot range", true)]
+    [InlineData("ran loo", "loot range", true)]
+    [InlineData("loot range", "lootrange", true)]
+    [InlineData("range loot", "loot", false)]
+    [InlineData("loot", "loo", false)]
+    [InlineData("loot range", "range", false)]
+    [InlineData("", "loot", false)]
+    public void NarrowsWhenEveryEarlierWordIsKept(string previous, string next, bool expected)
+    {
+        Assert.Equal(expected, new SearchQuery(next).Narrows(new SearchQuery(previous)));
+    }
+
+    [Fact]
+    public void ANarrowerSearchOnlyMatchesWhatTheEarlierOneDid()
+    {
+        string[] hays =
+        {
+            Hay,
+            SearchQuery.Haystack("Loot Radius", "General", "Range of the loot ring"),
+            SearchQuery.Haystack("Ranger", "Other", "nothing to see"),
+        };
+        var earlier = new SearchQuery("ran loo");
+        var later = new SearchQuery("loot range");
+        Assert.True(later.Narrows(earlier));
+        foreach (string hay in hays)
+        {
+            Assert.True(!later.Matches(hay) || earlier.Matches(hay));
+        }
+    }
+
+    [Theory]
     [InlineData("!Important Mod", "Important Mod")]
     [InlineData("  Padded ", "Padded")]
     [InlineData("", "com.x.y")]

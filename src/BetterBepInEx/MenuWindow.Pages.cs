@@ -31,24 +31,40 @@ namespace BetterBepInEx
 
         private static readonly string[] FilterNames = { "All", "Changed", "Toggles", "Numbers", "Lists", "Keybinds", "Text", "Other" };
 
+        private const string PageSearch = "@search";
+
         private RowFilter _filter = RowFilter.All;
         private readonly int[] _filterCounts = new int[8];
+        private int _filterHiddenCount;
 
-        /// <summary>Reused for each group's rows after filtering, so filtering allocates nothing.</summary>
-        private readonly List<Row> _groupRows = new List<Row>();
         private readonly HashSet<Row> _shownInConflicts = new HashSet<Row>();
         private readonly Dictionary<List<Row>, GUIContent> _conflictLabels = new Dictionary<List<Row>, GUIContent>();
 
+        /// <summary>
+        /// The page shown, chosen on Layout and kept for the event that follows, so a click that
+        /// opens another page or a key typed into the search box cannot change what is drawn
+        /// between the two. GUILayout throws when they disagree, and on a Repaint that cuts the
+        /// window's drawing short: a flash.
+        /// </summary>
+        private string _shownPage;
+
         private void DrawContent()
         {
-            ApplyMeasuredBlocks();
-            if (!_query.IsEmpty)
+            if (Event.current.type == EventType.Layout)
             {
-                DrawSearchResults();
-                return;
+                _shownPage = !_query.IsEmpty ? PageSearch : _page;
+                if (_shownPage != PageSearch && _shownPage != PageChanged && _shownPage != PageKeybinds
+                    && (_shownPage == null || !_model.PagesByGuid.ContainsKey(_shownPage)))
+                {
+                    _page = PageChanged;
+                    _shownPage = PageChanged;
+                }
             }
-            switch (_page)
+            switch (_shownPage)
             {
+                case PageSearch:
+                    DrawSearchResults();
+                    return;
                 case PageChanged:
                     DrawChanged();
                     return;
@@ -56,12 +72,11 @@ namespace BetterBepInEx
                     DrawKeybinds();
                     return;
             }
-            if (_page != null && _model.PagesByGuid.TryGetValue(_page, out Page page))
+            if (_shownPage != null && _model.PagesByGuid.TryGetValue(_shownPage, out Page page))
             {
                 DrawPage(page);
                 return;
             }
-            _page = PageChanged;
             DrawChanged();
         }
 
@@ -99,26 +114,32 @@ namespace BetterBepInEx
         /// </summary>
         private void DrawFilterBar(List<Row> rows)
         {
-            Array.Clear(_filterCounts, 0, _filterCounts.Length);
-            int hiddenCount = 0;
-            foreach (Row row in rows)
+            // Counted on Layout only: a search can list thousands of rows, and the chips drawn
+            // have to stay the same for the event that follows.
+            if (Event.current.type == EventType.Layout)
             {
-                // Advanced rows are always listed in search results, so only hidden ones count there.
-                if (row.IsHidden || row.IsAdvanced && _query.IsEmpty)
+                Array.Clear(_filterCounts, 0, _filterCounts.Length);
+                _filterHiddenCount = 0;
+                foreach (Row row in rows)
                 {
-                    hiddenCount++;
+                    // Advanced rows are always listed in search results, so only hidden ones count there.
+                    if (row.IsHidden || row.IsAdvanced && _query.IsEmpty)
+                    {
+                        _filterHiddenCount++;
+                    }
+                    if (!Passes(row, RowFilter.All))
+                    {
+                        continue;
+                    }
+                    _filterCounts[0]++;
+                    if (row.IsChanged)
+                    {
+                        _filterCounts[1]++;
+                    }
+                    _filterCounts[(int)row.Category + 2]++;
                 }
-                if (!Passes(row, RowFilter.All))
-                {
-                    continue;
-                }
-                _filterCounts[0]++;
-                if (row.IsChanged)
-                {
-                    _filterCounts[1]++;
-                }
-                _filterCounts[(int)row.Category + 2]++;
             }
+            int hiddenCount = _filterHiddenCount;
 
             GUILayout.Space(U(10));
             GUILayout.BeginHorizontal();
@@ -199,20 +220,22 @@ namespace BetterBepInEx
 
             DrawFilterBar(page.Rows);
 
-            BeginList(page.Guid);
-            int drawn = 0;
-            bool sectionNames = page.Sections.Count > 1 || page.Sections.Count == 1 && page.Sections[0].Name.Length > 0;
-            foreach (Section section in page.Sections)
+            if (BuildingList())
             {
-                drawn += DrawGroup(section, sectionNames && section.Name.Length > 0 ? section.Label : null, _skin.SectionHeader, null, section.Rows, false);
+                int listed = 0;
+                bool sectionNames = page.Sections.Count > 1 || page.Sections.Count == 1 && page.Sections[0].Name.Length > 0;
+                foreach (Section section in page.Sections)
+                {
+                    listed += AddGroup(section, sectionNames && section.Name.Length > 0 ? section.Label : null, _skin.SectionHeader, null, section.Rows, false);
+                }
+                if (listed == 0)
+                {
+                    _listEmpty = page.Rows.Count == 0 ? "This mod has no settings to change. It is listed so you can see everything that is loaded."
+                        : _filter != RowFilter.All ? "Nothing here matches the filter."
+                        : "This mod's author hides all of its settings or marks them advanced. Click \"Show hidden\" above to see them.";
+                }
             }
-            if (drawn == 0)
-            {
-                EmptyNote(page.Rows.Count == 0 ? "This mod has no settings to change. It is listed so you can see everything that is loaded."
-                    : _filter != RowFilter.All ? "Nothing here matches the filter."
-                    : "This mod's author hides all of its settings or marks them advanced. Click \"Show hidden\" above to see them.");
-            }
-            EndList(page.Guid);
+            DrawList(page.Guid);
         }
 
         // ------------------------------------------------------------------ search
@@ -221,15 +244,13 @@ namespace BetterBepInEx
         {
             Header(Cached("Search"), CountedLabel("Settings matching your search:  ", _searchResults.Count, 30));
             DrawFilterBar(_searchResults);
-            BeginList("@search");
-            int drawn = DrawByPage(_searchResults, null);
-            if (drawn == 0)
+            if (BuildingList() && AddByPage(_searchResults, null) == 0)
             {
-                EmptyNote(_searchResults.Count == 0
+                _listEmpty = _searchResults.Count == 0
                     ? "Nothing matches. Every word has to appear in a mod's name, a setting's name, its section or its description."
-                    : "Nothing here matches the filter.");
+                    : "Nothing here matches the filter.";
             }
-            EndList("@search");
+            DrawList(PageSearch);
         }
 
         // ------------------------------------------------------------------ changed
@@ -258,13 +279,11 @@ namespace BetterBepInEx
             GUILayout.EndHorizontal();
 
             DrawFilterBar(_model.ChangedRows);
-            BeginList(PageChanged);
-            int drawn = DrawByPage(_model.ChangedRows, null);
-            if (drawn == 0)
+            if (BuildingList() && AddByPage(_model.ChangedRows, null) == 0)
             {
-                EmptyNote(_model.ChangedCount == 0 ? "Every setting is at its default." : "Nothing here matches the filter.");
+                _listEmpty = _model.ChangedCount == 0 ? "Every setting is at its default." : "Nothing here matches the filter.";
             }
-            EndList(PageChanged);
+            DrawList(PageChanged);
         }
 
         // ------------------------------------------------------------------ keybinds
@@ -277,39 +296,75 @@ namespace BetterBepInEx
                 : "Every key bound by a mod. Keys that more than one setting uses come first; every mod bound to one reacts to it."));
             GUILayout.Space(U(6));
 
-            BeginList(PageKeybinds);
-            _shownInConflicts.Clear();
-            foreach (List<Row> group in _model.ConflictGroups)
+            if (BuildingList())
             {
-                if (!_conflictLabels.TryGetValue(group, out GUIContent title))
+                _shownInConflicts.Clear();
+                int listed = 0;
+                foreach (List<Row> group in _model.ConflictGroups)
                 {
-                    title = new GUIContent(ShortcutText(group[0].Setting.Get()) + "   used by " + group.Count + " settings");
-                    _conflictLabels[group] = title;
+                    if (!_conflictLabels.TryGetValue(group, out GUIContent title))
+                    {
+                        title = new GUIContent(ShortcutText(group[0].Setting.Get()) + "   used by " + group.Count + " settings");
+                        _conflictLabels[group] = title;
+                    }
+                    listed += AddGroup(group, title, _skin.GroupHeaderDanger, null, group, true);
+                    foreach (Row row in group)
+                    {
+                        _shownInConflicts.Add(row);
+                    }
                 }
-                DrawGroup(group, title, _skin.GroupHeaderDanger, null, group, true);
-                foreach (Row row in group)
+                listed += AddByPage(_model.KeybindRows, _shownInConflicts);
+                if (_model.KeybindRows.Count == 0)
                 {
-                    _shownInConflicts.Add(row);
+                    _listEmpty = "No mod has a keybind setting.";
+                }
+                else if (listed == 0)
+                {
+                    _listEmpty = "Nothing here matches the filter.";
                 }
             }
-            int drawn = DrawByPage(_model.KeybindRows, _shownInConflicts);
-            if (_model.KeybindRows.Count == 0)
-            {
-                EmptyNote("No mod has a keybind setting.");
-            }
-            else if (drawn == 0 && conflicts == 0)
-            {
-                EmptyNote("Nothing here matches the filter.");
-            }
-            EndList(PageKeybinds);
+            DrawList(PageKeybinds);
         }
 
         // ------------------------------------------------------------------ lists of rows
 
-        /// <summary>Rows from many mods, grouped under each mod's name, in the order given.</summary>
-        private int DrawByPage(List<Row> rows, HashSet<Row> skip)
+        /// <summary>
+        /// One entry in a scrolling list: a heading, the gap above an unnamed section, or a
+        /// setting's row. Pages list their blocks on Layout (<see cref="BuildingList"/>); the
+        /// event that follows draws the same ones.
+        /// </summary>
+        private struct Block
         {
-            int drawn = 0;
+            /// <summary>What the block's height is kept under: its Row, Page, Section or conflict group. Null for a gap.</summary>
+            public object Key;
+            public Row Row;
+            public GUIContent Header;
+            public GUIStyle Style;
+            public Page Link;
+            public bool PageName;
+            public bool First;
+            public bool Last;
+        }
+
+        private readonly List<Block> _blocks = new List<Block>();
+        private string _listEmpty;
+
+        /// <summary>True on Layout, when the page lists its blocks afresh; every other event draws the same ones.</summary>
+        private bool BuildingList()
+        {
+            if (Event.current.type != EventType.Layout)
+            {
+                return false;
+            }
+            _blocks.Clear();
+            _listEmpty = null;
+            return true;
+        }
+
+        /// <summary>Rows from many mods, grouped under each mod's name, in the order given.</summary>
+        private int AddByPage(List<Row> rows, HashSet<Row> skip)
+        {
+            int listed = 0;
             int start = 0;
             while (start < rows.Count)
             {
@@ -319,67 +374,44 @@ namespace BetterBepInEx
                 {
                     end++;
                 }
-                drawn += DrawGroup(page, page.Title, _skin.GroupHeader, page, rows, false, start, end, skip);
+                listed += AddGroup(page, page.Title, _skin.GroupHeader, page, rows, false, start, end, skip);
                 start = end;
             }
-            return drawn;
+            return listed;
         }
 
         /// <summary>
-        /// One heading and a card of rows under it. Rows the filter hides are dropped first, so
-        /// the card's rounded top and bottom land on the rows actually shown, and an empty group
-        /// draws nothing. Returns the number of rows drawn.
+        /// One heading and a card of rows under it. Rows the filter hides are left out, so the
+        /// card's rounded top and bottom land on the rows actually shown, and an empty group adds
+        /// nothing. Returns the number of rows added.
         /// </summary>
-        private int DrawGroup(object key, GUIContent header, GUIStyle headerStyle, Page link, List<Row> rows, bool showPageName,
+        private int AddGroup(object key, GUIContent header, GUIStyle headerStyle, Page link, List<Row> rows, bool showPageName,
             int start = 0, int end = -1, HashSet<Row> skip = null)
         {
             if (end < 0)
             {
                 end = rows.Count;
             }
-            _groupRows.Clear();
+            int count = 0;
             for (int i = start; i < end; i++)
             {
                 Row row = rows[i];
-                if (Passes(row) && (skip == null || !skip.Contains(row)))
+                if (!Passes(row) || skip != null && skip.Contains(row))
                 {
-                    _groupRows.Add(row);
+                    continue;
                 }
-            }
-            if (_groupRows.Count == 0)
-            {
-                return 0;
-            }
-
-            if (header != null && BlockVisible(key))
-            {
-                if (link != null)
+                if (count == 0)
                 {
-                    if (GUILayout.Button(header, headerStyle, GUILayout.ExpandWidth(true)))
-                    {
-                        Select(link.Guid);
-                    }
+                    _blocks.Add(new Block { Key = header == null ? null : key, Header = header, Style = headerStyle, Link = link });
                 }
-                else
-                {
-                    GUILayout.Label(header, headerStyle, GUILayout.ExpandWidth(true));
-                }
-                MeasureBlock(key);
+                _blocks.Add(new Block { Key = row, Row = row, PageName = showPageName, First = count == 0 });
+                count++;
             }
-            else if (header == null)
+            if (count > 0)
             {
-                GUILayout.Space(U(8));
-            }
-
-            int count = _groupRows.Count;
-            for (int i = 0; i < count; i++)
-            {
-                Row row = _groupRows[i];
-                if (BlockVisible(row))
-                {
-                    DrawRow(row, showPageName, i == 0, i == count - 1);
-                    MeasureBlock(row);
-                }
+                Block last = _blocks[_blocks.Count - 1];
+                last.Last = true;
+                _blocks[_blocks.Count - 1] = last;
             }
             return count;
         }
@@ -392,120 +424,343 @@ namespace BetterBepInEx
 
         // ------------------------------------------------------------------ virtualized list
 
-        // Only rows inside (or within a screen of) the visible part of the list are drawn; the
-        // rest become a GUILayout.Space of their measured height. IMGUI lays out every control
-        // on every event, several events a frame, so on a 300-setting mod this is most of the cost.
+        // IMGUI lays out every control on every event, several events a frame, so only the blocks
+        // on screen are drawn; above and below them is one Space each (see Core/VirtualList).
+        // Heights are measured when a block is drawn and kept per row, heading or section, across
+        // pages and searches, until the layout changes (width, text size, descriptions). A new
+        // search therefore draws a screenful of rows, not every match.
         //
-        // Heights are measured on Repaint into _pendingRects and only applied at the next
-        // Layout event. Applying them mid-frame would let Layout and Repaint disagree about which
-        // rows exist, which GUILayout punishes with an ArgumentException. Blocks carry no margins,
-        // so a Space of the same height takes exactly the same room.
+        // What is drawn is decided on Layout and kept for the event that follows: GUILayout throws
+        // when the two disagree, and on a Repaint that cuts the window's drawing short.
+        //
+        // The view stays put by remembering, after each Repaint, which row is at its top and how
+        // far into it; the next Layout scrolls to that row wherever the new heights put it.
 
-        private readonly Dictionary<object, Rect> _blockRects = new Dictionary<object, Rect>();
-        private readonly Dictionary<object, Rect> _pendingRects = new Dictionary<object, Rect>();
-        private float _listScrollY;
-        private float _listViewHeight = 2000f;
-        private float _pendingViewHeight;
+        private const float ListMovingSeconds = 0.2f;
+
+        private readonly VirtualList _virtual = new VirtualList();
+        private readonly Dictionary<object, float> _heights = new Dictionary<object, float>();
+
+        /// <summary>Heights of rows drawn with their mod's name over them (the Keybinds page's conflicts).</summary>
+        private readonly Dictionary<object, float> _pagedHeights = new Dictionary<object, float>();
+
+        private float _plainRowSum;
+        private int _plainRowCount;
+        private float _headerSum;
+        private int _headerCount;
+        private float _descCharsPerLine = 60f;
+
         private string _listKey;
         private RowFilter _listFilter;
-        private string _listQuery;
-        private int _listWidth;
-        private int _listFlags;
-        private Vector2 _listScroll;
+        private SearchQuery _listQuery;
+        private int _listWidth = -1;
+        private int _listFlags = -1;
+        private float _listViewHeight;
+        private Rect _listViewRect;
+        private float _listMaxScroll;
+        private float _topSpace;
+        private float _bottomSpace;
 
+        /// <summary>Blocks First up to this one are all measured, so where they will land is known before drawing.</summary>
+        private int _knownRun;
+
+        private Row _anchorRow;
+        private bool _anchorPaged;
+        private float _anchorOffset;
+
+        private bool _wheeling;
+        private float _wheelTarget;
+        private float _listMovedAt = -10f;
+
+        /// <summary>The list scrolled within the last moment; row hover and tooltips wait until it stops.</summary>
+        private bool ListMoving => Time.realtimeSinceStartup - _listMovedAt < ListMovingSeconds;
+
+        /// <summary>Forgets every measured height: the rows will lay out differently.</summary>
         private void ResetVirtualization()
         {
-            _blockRects.Clear();
-            _pendingRects.Clear();
-            _listKey = null;
+            _heights.Clear();
+            _pagedHeights.Clear();
+            _plainRowSum = 0f;
+            _plainRowCount = 0;
+            _headerSum = 0f;
+            _headerCount = 0;
         }
 
-        private void ApplyMeasuredBlocks()
+        private void ArrangeList(string key)
         {
-            if (Event.current.type != EventType.Layout)
-            {
-                return;
-            }
-            if (_pendingRects.Count > 0)
-            {
-                foreach (KeyValuePair<object, Rect> kv in _pendingRects)
-                {
-                    _blockRects[kv.Key] = kv.Value;
-                }
-                _pendingRects.Clear();
-            }
-            if (_pendingViewHeight > 0f)
-            {
-                _listViewHeight = _pendingViewHeight;
-                _pendingViewHeight = 0f;
-            }
-        }
-
-        private void BeginList(string key)
-        {
+            // What a row's height depends on. Show hidden and search change which rows are listed,
+            // not how tall they are.
             int width = Mathf.RoundToInt(_rowWidth);
-            int flags = (_plugin.ShowDescriptions.Value ? 1 : 0) | (ShowAdvanced ? 2 : 0) | (ShowHidden ? 4 : 0);
-            if (!ReferenceEquals(key, _listKey) || _filter != _listFilter || !ReferenceEquals(_query.Text, _listQuery)
-                || width != _listWidth || flags != _listFlags)
+            int flags = _plugin.ShowDescriptions.Value ? 1 : 0;
+            if (width != _listWidth || flags != _listFlags)
             {
-                // A different list, or the same one laid out differently: every cached position is wrong.
-                if (Event.current.type == EventType.Layout)
-                {
-                    _blockRects.Clear();
-                    _pendingRects.Clear();
-                    _listKey = key;
-                    _listFilter = _filter;
-                    _listQuery = _query.Text;
-                    _listWidth = width;
-                    _listFlags = flags;
-                }
+                ResetVirtualization();
+                _listWidth = width;
+                _listFlags = flags;
             }
 
             _scroll.TryGetValue(key, out Vector2 pos);
-            // Visibility is judged from the position before this event scrolls it, so the Layout
-            // and the event that follows it agree.
-            _listScrollY = pos.y;
-            _listScroll = GUILayout.BeginScrollView(pos, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, GUIStyle.none);
-            GUILayout.BeginVertical(GUILayout.Width(_rowWidth));
+            bool sameList = key == _listKey;
+            if (sameList && _filter != _listFilter || key == PageSearch && !ReferenceEquals(_query, _listQuery))
+            {
+                // The same list filtered differently, or a new search: start from the top.
+                pos = Vector2.zero;
+            }
+            if (!sameList || _filter != _listFilter || !ReferenceEquals(_query, _listQuery))
+            {
+                _anchorRow = null;
+                _wheeling = false;
+            }
+            _listKey = key;
+            _listFilter = _filter;
+            _listQuery = _query;
+
+            GUIStyle desc = _skin.Description;
+            float charWidth = Mathf.Max(4f, (desc.fontSize > 0 ? desc.fontSize : U(13)) * 0.5f);
+            _descCharsPerLine = Mathf.Max(10f, (_rowWidth - _valueWidth - U(60)) / charWidth);
+
+            _virtual.Clear();
+            int anchor = -1;
+            for (int i = 0; i < _blocks.Count; i++)
+            {
+                Block b = _blocks[i];
+                _virtual.Add(HeightOf(b, out bool known), known);
+                if (anchor < 0 && _anchorRow != null && b.Row == _anchorRow && b.PageName == _anchorPaged)
+                {
+                    anchor = i;
+                }
+            }
+            if (anchor >= 0)
+            {
+                // A wheel scroll under way moves with the rows it is heading for.
+                float y = _virtual.Y(anchor) + _anchorOffset;
+                _wheelTarget += y - pos.y;
+                pos.y = y;
+            }
+
+            float view = _listViewHeight > 0f ? _listViewHeight : _rect.height;
+            _listMaxScroll = Mathf.Max(0f, _virtual.Total + U(32) - view);
+            pos.y = Mathf.Clamp(pos.y, 0f, _listMaxScroll);
+            _wheelTarget = Mathf.Clamp(_wheelTarget, 0f, _listMaxScroll);
+            _scroll[key] = pos;
+
+            _virtual.Arrange(pos.y, view, Mathf.Max(U(160), view * 0.25f), view, U(36), 8);
+            _topSpace = _virtual.TopSpace;
+            _bottomSpace = _virtual.BottomSpace;
+            _knownRun = _virtual.First;
+            while (_knownRun < _virtual.End && _virtual.Known(_knownRun))
+            {
+                _knownRun++;
+            }
         }
 
-        private void EndList(string key)
+        private float HeightOf(Block b, out bool known)
         {
+            known = true;
+            if (b.Key == null)
+            {
+                return U(8);
+            }
+            if ((b.PageName ? _pagedHeights : _heights).TryGetValue(b.Key, out float h))
+            {
+                return h;
+            }
+            known = false;
+            if (b.Row == null)
+            {
+                return _headerCount > 0 ? _headerSum / _headerCount : U(44);
+            }
+            h = _plainRowCount > 0 ? _plainRowSum / _plainRowCount : U(60);
+            if (b.PageName)
+            {
+                h += _skin.Small.lineHeight;
+            }
+            if (_plugin.ShowDescriptions.Value && b.Row.Description != null)
+            {
+                h += _skin.Description.lineHeight * Mathf.Ceil(b.Row.Description.Length / _descCharsPerLine) + U(4);
+            }
+            return h;
+        }
+
+        private void StoreHeight(Block b, float h)
+        {
+            if (b.Key == null)
+            {
+                return;
+            }
+            Dictionary<object, float> heights = b.PageName ? _pagedHeights : _heights;
+            bool first = !heights.ContainsKey(b.Key);
+            heights[b.Key] = h;
+            if (!first)
+            {
+                return;
+            }
+            // Averages for the rows and headings not drawn yet.
+            if (b.Row == null)
+            {
+                _headerSum += h;
+                _headerCount++;
+            }
+            else if (!b.PageName && (!_plugin.ShowDescriptions.Value || b.Row.Description == null))
+            {
+                _plainRowSum += h;
+                _plainRowCount++;
+            }
+        }
+
+        /// <summary>The scrolling list of <see cref="_blocks"/>, with the view kept where it was.</summary>
+        private void DrawList(string key)
+        {
+            Event e = Event.current;
+            EventType type = e.type;
+            if (type == EventType.Layout)
+            {
+                ArrangeList(key);
+            }
+            key = _listKey ?? key;
+            _scroll.TryGetValue(key, out Vector2 pos);
+
+            // The wheel eases towards where it points rather than jumping a notch at a time.
+            if (type == EventType.ScrollWheel && e.delta.y != 0f && _listViewRect.Contains(e.mousePosition))
+            {
+                _wheelTarget = Mathf.Clamp((_wheeling ? _wheelTarget : pos.y) + e.delta.y * U(20), 0f, _listMaxScroll);
+                _wheeling = true;
+                _listMovedAt = Time.realtimeSinceStartup;
+                e.Use();
+            }
+
+            Vector2 shown = GUILayout.BeginScrollView(pos, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, GUIStyle.none);
+            GUILayout.BeginVertical(GUILayout.Width(_rowWidth));
+            GUILayout.Space(_topSpace);
+            for (int i = _virtual.First; i < _virtual.End; i++)
+            {
+                DrawBlock(i, false);
+            }
+            GUILayout.Space(_bottomSpace);
+            if (_listEmpty != null)
+            {
+                EmptyNote(_listEmpty);
+            }
             GUILayout.Space(U(32));
             GUILayout.EndVertical();
             GUILayout.EndScrollView();
-            if (Event.current.type == EventType.Repaint)
+            if (type == EventType.Repaint)
             {
-                _pendingViewHeight = GUILayoutUtility.GetLastRect().height;
+                _listViewRect = GUILayoutUtility.GetLastRect();
+                _listViewHeight = _listViewRect.height;
             }
-            _scroll[key] = _listScroll;
+
+            if (_virtual.Offscreen.Count > 0)
+            {
+                // Rows about to scroll into view from above, measured where nobody can see or click them.
+                GUILayout.BeginArea(new Rect(-100000f, 0f, _rowWidth, 1f));
+                GUILayout.BeginVertical(GUILayout.Width(_rowWidth));
+                foreach (int i in _virtual.Offscreen)
+                {
+                    DrawBlock(i, true);
+                }
+                GUILayout.EndVertical();
+                GUILayout.EndArea();
+            }
+
+            if (type == EventType.Repaint)
+            {
+                if (_wheeling)
+                {
+                    float step = 1f - Mathf.Exp(-Mathf.Min(Time.unscaledDeltaTime, 0.1f) * 16f);
+                    pos.y = Mathf.Abs(_wheelTarget - pos.y) < 0.5f ? _wheelTarget : pos.y + (_wheelTarget - pos.y) * step;
+                    _wheeling = pos.y != _wheelTarget;
+                    _listMovedAt = Time.realtimeSinceStartup;
+                }
+                RememberAnchor(pos.y);
+            }
+            else if (type != EventType.Layout && shown != pos)
+            {
+                // Dragged the scrollbar: that wins over the wheel, and over the remembered row.
+                pos = shown;
+                _wheeling = false;
+                _anchorRow = null;
+                _listMovedAt = Time.realtimeSinceStartup;
+            }
+            _scroll[key] = pos;
         }
 
-        private bool BlockVisible(object key)
+        private void DrawBlock(int i, bool offscreen)
         {
-            if (!_blockRects.TryGetValue(key, out Rect r))
+            Block b = _blocks[i];
+            if (b.Key == null)
             {
-                return true;
+                GUILayout.Space(U(8));
             }
-            float overscan = _listViewHeight;
-            if (r.yMax >= _listScrollY - overscan && r.y <= _listScrollY + _listViewHeight + overscan)
+            else if (b.Row != null)
             {
-                return true;
+                Rect known = !offscreen && i < _knownRun ? new Rect(0f, _virtual.Y(i), _rowWidth, _virtual.Height(i)) : default;
+                DrawRow(b.Row, b.PageName, b.First, b.Last, offscreen, known);
             }
-            GUILayout.Space(r.height);
-            return false;
-        }
+            else if (b.Link != null)
+            {
+                if (GUILayout.Button(b.Header, b.Style, GUILayout.ExpandWidth(true)) && !offscreen)
+                {
+                    Select(b.Link.Guid);
+                }
+            }
+            else
+            {
+                GUILayout.Label(b.Header, b.Style, GUILayout.ExpandWidth(true));
+            }
 
-        private void MeasureBlock(object key)
-        {
             if (Event.current.type == EventType.Repaint)
             {
                 Rect r = GUILayoutUtility.GetLastRect();
-                if (!_blockRects.TryGetValue(key, out Rect old) || old != r)
+                if (!_virtual.Known(i) || r.height != _virtual.Height(i))
                 {
-                    _pendingRects[key] = r;
+                    StoreHeight(b, r.height);
+                }
+                if (!offscreen)
+                {
+                    _virtual.Shown(i, r.y, r.height);
                 }
             }
+        }
+
+        /// <summary>
+        /// Notes the row at the top of the view and how far into it, as drawn this Repaint, so the
+        /// next Layout can keep it there whatever heights change above it.
+        /// </summary>
+        private void RememberAnchor(float scroll)
+        {
+            _anchorRow = null;
+            if (scroll <= 0f)
+            {
+                return;
+            }
+            int i = _virtual.IndexAt(scroll);
+            if (i < 0)
+            {
+                return;
+            }
+            // Headings can repeat (a mod's name heads each run of its keybinds), so the anchor is
+            // the nearest row: the one in view, or the first one below a heading.
+            int row = i;
+            while (row < _blocks.Count && _blocks[row].Row == null)
+            {
+                row++;
+            }
+            if (row == _blocks.Count)
+            {
+                row = i;
+                while (row >= 0 && _blocks[row].Row == null)
+                {
+                    row--;
+                }
+                if (row < 0)
+                {
+                    return;
+                }
+            }
+            _anchorRow = _blocks[row].Row;
+            _anchorPaged = _blocks[row].PageName;
+            _anchorOffset = scroll - _virtual.DisplayedTop(row);
         }
 
         private void CopyRows(IEnumerable<Row> rows, string what)
@@ -568,29 +823,18 @@ namespace BetterBepInEx
         /// column on the right, so controls line up down the page whatever the left side holds.
         /// The card shape comes from the row's place in its group.
         /// </summary>
-        private void DrawRow(Row row, bool showPageName, bool first, bool last)
+        /// <param name="offscreen">Drawn out of sight only to be measured: no decorations.</param>
+        /// <param name="known">Where the row will land, when its height and those above it are measured; empty otherwise.</param>
+        private void DrawRow(Row row, bool showPageName, bool first, bool last, bool offscreen, Rect known)
         {
             GUILayout.BeginHorizontal(CardStyle(first, last));
-            bool repaint = Event.current.type == EventType.Repaint;
-            if (repaint && row.LastRect.width > 0)
+            bool repaint = Event.current.type == EventType.Repaint && !offscreen;
+            if (repaint && known.width > 0f && !ListMoving && known.Contains(Event.current.mousePosition))
             {
-                // Decorations from last frame's rect: the row's own rect is only known after it
-                // is laid out, and in steady state the two are the same.
-                Rect r = row.LastRect;
-                if (!first)
-                {
-                    _skin.Fill(new Rect(r.x + U(16), r.y, r.width - U(32), 1), Skin.Divider);
-                }
-                if (r.Contains(Event.current.mousePosition))
-                {
-                    _skin.RowHover.Draw(new Rect(r.x + U(3), r.y + U(3), r.width - U(6), r.height - U(6)), false, false, false, false);
-                }
-                bool conflict = _model.Conflicts.ContainsKey(row);
-                if (row.IsChanged || conflict)
-                {
-                    float h = Mathf.Max(U(16), r.height - U(28));
-                    _skin.Fill(new Rect(r.x + U(5), r.y + (r.height - h) / 2f, U(3), h), conflict ? Skin.Danger : Skin.Accent);
-                }
+                // The hover goes under the row's text, so it needs the rect before the row is
+                // laid out. Rows only light up once the list stops: a list scrolling under a
+                // still cursor would flicker every row it passes.
+                _skin.RowHover.Draw(new Rect(known.x + U(3), known.y + U(3), known.width - U(6), known.height - U(6)), false, false, false, false);
             }
 
             GUILayout.BeginVertical();
@@ -650,7 +894,19 @@ namespace BetterBepInEx
 
             if (repaint)
             {
-                row.LastRect = GUILayoutUtility.GetLastRect();
+                // The divider and the changed bar sit in the card's padding, clear of the text, so
+                // they are drawn after it, in the rect the row really got this frame.
+                Rect r = GUILayoutUtility.GetLastRect();
+                if (!first)
+                {
+                    _skin.Fill(new Rect(r.x + U(16), r.y, r.width - U(32), 1), Skin.Divider);
+                }
+                bool conflict = _model.Conflicts.ContainsKey(row);
+                if (row.IsChanged || conflict)
+                {
+                    float h = Mathf.Max(U(16), r.height - U(28));
+                    _skin.Fill(new Rect(r.x + U(5), r.y + (r.height - h) / 2f, U(3), h), conflict ? Skin.Danger : Skin.Accent);
+                }
             }
         }
 

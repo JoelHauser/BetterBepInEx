@@ -111,6 +111,7 @@ namespace BetterBepInEx
             }
             _conflictLabels.Clear();
             _searchDirty = true;
+            _searchResultsFor = null;
             _sortDirty = true;
         }
 

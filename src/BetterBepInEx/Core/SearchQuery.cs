@@ -43,6 +43,36 @@ namespace BetterBepInEx.Core
             return true;
         }
 
+        /// <summary>
+        /// True when everything this query matches, <paramref name="previous"/> matched too: each of
+        /// the earlier words is part of one of these. Typing more letters or words narrows a search,
+        /// so its results can be filtered from the last ones instead of every setting.
+        /// </summary>
+        public bool Narrows(SearchQuery previous)
+        {
+            if (previous == null || previous.IsEmpty)
+            {
+                return false;
+            }
+            foreach (string old in previous._words)
+            {
+                bool found = false;
+                foreach (string word in _words)
+                {
+                    if (word.IndexOf(old, StringComparison.Ordinal) >= 0)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         public static string Haystack(params string[] parts)
         {
             return string.Join("\n", parts).ToLowerInvariant();

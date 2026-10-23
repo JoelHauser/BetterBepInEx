@@ -41,6 +41,9 @@ namespace BetterBepInEx
         private SearchQuery _query = SearchQuery.Empty;
         private readonly List<Row> _searchResults = new List<Row>();
         private bool _searchDirty = true;
+
+        /// <summary>The search <see cref="_searchResults"/> holds the matches for; null once they are stale.</summary>
+        private SearchQuery _searchResultsFor;
         private string _page;
         private readonly Dictionary<string, Vector2> _scroll = new Dictionary<string, Vector2>();
         private Vector2 _sidebarScroll;
@@ -108,7 +111,6 @@ namespace BetterBepInEx
         {
             _plugin.ShowHidden.Value = !_plugin.ShowHidden.Value;
             _model.MarkCountsDirty();
-            ResetVirtualization();
         }
 
         public void OnModelRebuilt()
@@ -116,6 +118,7 @@ namespace BetterBepInEx
             _renaming = null;
             ApplyCustomizations();
             _searchDirty = true;
+            _searchResultsFor = null;
             _failedRows.Clear();
             _conflictLabels.Clear();
             ResetVirtualization();
@@ -503,11 +506,21 @@ namespace BetterBepInEx
         private void RebuildSearch()
         {
             _searchDirty = false;
-            _searchResults.Clear();
             if (_query.IsEmpty)
             {
+                _searchResults.Clear();
+                _searchResultsFor = null;
                 return;
             }
+            if (_searchResultsFor != null && _query.Narrows(_searchResultsFor))
+            {
+                // Typing on: every match is among the last ones, so only they are checked.
+                _searchResults.RemoveAll(row => !_query.Matches(row.Haystack));
+                _searchResultsFor = _query;
+                return;
+            }
+            _searchResults.Clear();
+            _searchResultsFor = _query;
             foreach (Page page in _model.Pages)
             {
                 foreach (Row row in page.Rows)
@@ -777,10 +790,33 @@ namespace BetterBepInEx
             }
         }
 
+        /// <summary>How long the cursor rests on something before its tooltip shows.</summary>
+        private const float TooltipDelay = 0.3f;
+
+        private string _tipPending;
+        private float _tipSince;
+
         private void DrawTooltip()
         {
+            if (Event.current.type != EventType.Repaint)
+            {
+                return;
+            }
+            // Shown once the cursor rests, and never while the list scrolls under it: otherwise
+            // every setting name it crosses flashes its description up.
             string tip = GUI.tooltip;
-            if (string.IsNullOrEmpty(tip) || Event.current.type != EventType.Repaint)
+            float now = Time.realtimeSinceStartup;
+            if (string.IsNullOrEmpty(tip) || ListMoving)
+            {
+                _tipPending = null;
+                return;
+            }
+            if (tip != _tipPending)
+            {
+                _tipPending = tip;
+                _tipSince = now;
+            }
+            if (now - _tipSince < TooltipDelay)
             {
                 return;
             }

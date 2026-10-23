@@ -69,8 +69,6 @@ namespace BetterBepInEx
         public GUIContent[] KeyCaps;
         public object KeyCapsValue;
 
-        /// <summary>Where the row was drawn last Repaint, in its scroll view's coordinates (for hover).</summary>
-        public Rect LastRect;
         public string Description;
         public GUIContent DescriptionContent;
 
