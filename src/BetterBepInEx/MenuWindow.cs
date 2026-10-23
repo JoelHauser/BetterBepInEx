@@ -135,6 +135,7 @@ namespace BetterBepInEx
         private string _focusedName = string.Empty;
 
         private int _inputResetFrame = -1;
+        private int _labelsForKeybinds;
 
         /// <summary>
         /// Bumped whenever what a list shows may have changed other than through the model (a new
@@ -185,6 +186,8 @@ namespace BetterBepInEx
 
         public void OnModelRebuilt()
         {
+            // The held slider's row is about to be replaced; end the drag on the old one.
+            EndSlide();
             _sortDirty = true;
             _searchDirty = true;
             _searchResultsFor = null;
@@ -273,6 +276,12 @@ namespace BetterBepInEx
             if (_slideRow == null)
             {
                 _model.RefreshIfDirty(ShowHidden);
+                if (_model.KeybindsVersion != _labelsForKeybinds)
+                {
+                    // Keyed by the conflict lists, which were just replaced.
+                    _labelsForKeybinds = _model.KeybindsVersion;
+                    _conflictLabels.Clear();
+                }
             }
             if (_searchDirty)
             {
@@ -334,9 +343,8 @@ namespace BetterBepInEx
             // game) still ends the drag. Read from the GUI event, never from Input: the
             // ResetInputAxes below makes Input report the button up every frame, which ended
             // every drag one frame after it began (0.4.6 to 0.4.9).
-            if (_slideRow != null && e.rawType == EventType.MouseUp)
+            if (_slideRow != null && e.rawType == EventType.MouseUp && e.button == 0)
             {
-                GUIUtility.hotControl = 0;
                 EndSlide();
             }
 
@@ -1242,6 +1250,7 @@ namespace BetterBepInEx
 
         private void Undo()
         {
+            EndSlide();
             CommitEdit();
             if (_model.Undo(out string label))
             {
@@ -1251,6 +1260,7 @@ namespace BetterBepInEx
 
         private void Redo()
         {
+            EndSlide();
             CommitEdit();
             if (_model.Redo(out string label))
             {
@@ -1263,10 +1273,10 @@ namespace BetterBepInEx
         /// arms the button for four seconds and relabels it "<paramref name="armedPrefix"/>N?"; the
         /// second does it. The armed label is only made while armed.
         /// </summary>
-        private bool Confirm(object key, string label, string armedPrefix, int count, GUIStyle style, params GUILayoutOption[] options)
+        private bool Confirm(object key, string label, string armedPrefix, int count, int slot, GUIStyle style, params GUILayoutOption[] options)
         {
             bool armed = Equals(_confirmKey, key) && Time.realtimeSinceStartup - _confirmTime < 4f;
-            GUIContent content = armed ? Cached(armedPrefix + count + "?") : Cached(label);
+            GUIContent content = armed ? CountedLabel(armedPrefix, count, slot, "?") : Cached(label);
             if (!GUILayout.Button(content, armed ? _skin.ButtonDanger : style, options))
             {
                 return false;

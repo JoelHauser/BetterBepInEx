@@ -71,6 +71,8 @@ namespace BetterBepInEx
         private RowFilter _filter = RowFilter.All;
         private readonly int[] _filterCounts = new int[8];
         private int _filterHiddenCount;
+        private RowFilter _chipsFilter = RowFilter.All;
+        private bool _chipsShowHidden;
 
         private readonly HashSet<Row> _shownInConflicts = new HashSet<Row>();
         private readonly Dictionary<List<Row>, GUIContent> _conflictLabels = new Dictionary<List<Row>, GUIContent>();
@@ -174,6 +176,14 @@ namespace BetterBepInEx
                     _filterCounts[(int)row.Category + 2]++;
                 }
             }
+            // Which chips there are is fixed on Layout too. The title bar's and sidebar's switches
+            // are drawn first and can flip Show hidden mid-click, and a chip click changes the
+            // filter partway through this loop; either would add or drop a chip from that event.
+            if (Event.current.type == EventType.Layout)
+            {
+                _chipsFilter = _filter;
+                _chipsShowHidden = ShowHidden;
+            }
             int hiddenCount = _filterHiddenCount;
 
             GUILayout.Space(U(10));
@@ -181,11 +191,11 @@ namespace BetterBepInEx
             for (int i = 0; i < Filters.Length; i++)
             {
                 RowFilter f = Filters[i];
-                if (_filterCounts[i] == 0 && f != RowFilter.All && f != _filter)
+                if (_filterCounts[i] == 0 && f != RowFilter.All && f != _chipsFilter)
                 {
                     continue;
                 }
-                bool on = _filter == f;
+                bool on = _chipsFilter == f;
                 if (GUILayout.Button(CountedLabel(FilterNames[i], _filterCounts[i], 10 + i), on ? _skin.ChipOn : _skin.Chip, NoExpand))
                 {
                     _filter = on && f != RowFilter.All ? RowFilter.All : f;
@@ -194,7 +204,7 @@ namespace BetterBepInEx
             GUILayout.FlexibleSpace();
             // The switch itself is in the title bar, on every page. Here, only what it would add
             // to this list, where there is something: most mods hide or mark advanced nothing.
-            if (hiddenCount > 0 && !ShowHidden)
+            if (hiddenCount > 0 && !_chipsShowHidden)
             {
                 GUIContent label = CountedLabel("+", hiddenCount, 22, " advanced");
                 label.tooltip = "Settings this list leaves out. Click to turn on Show advanced.";
@@ -229,7 +239,7 @@ namespace BetterBepInEx
                 Application.OpenURL(page.Website);
             }
             GUI.enabled = page.ChangedCount > 0;
-            if (Confirm(page, "Reset mod", "Reset ", page.ChangedCount, _skin.GhostDanger, NoExpand))
+            if (Confirm(page, "Reset mod", "Reset ", page.ChangedCount, 50, _skin.GhostDanger, NoExpand))
             {
                 ResetRows(page.Rows, "reset " + page.DisplayName);
             }
@@ -281,7 +291,7 @@ namespace BetterBepInEx
             GUILayout.EndVertical();
             GUILayout.FlexibleSpace();
             GUI.enabled = _model.ChangedCount > 0;
-            if (Confirm(PageChanged, "Reset all", "Reset all ", _model.ChangedCount, _skin.GhostDanger, NoExpand))
+            if (Confirm(PageChanged, "Reset all", "Reset all ", _model.ChangedCount, 51, _skin.GhostDanger, NoExpand))
             {
                 ResetRows(new List<Row>(_model.ChangedRows), "reset every mod");
             }
@@ -317,7 +327,9 @@ namespace BetterBepInEx
                         title = new GUIContent(ShortcutText(group[0].Setting.Get()) + "   used by " + group.Count + " settings");
                         _conflictLabels[group] = title;
                     }
-                    listed += AddGroup(group, title, _skin.GroupHeaderDanger, null, group, true);
+                    // Every conflict heading is one line in one style: one height, kept under one
+                    // key, not under the group's list, which is a new object each time keys change.
+                    listed += AddGroup(ConflictHeadingKey, title, _skin.GroupHeaderDanger, null, group, true);
                     foreach (Row row in group)
                     {
                         _shownInConflicts.Add(row);
@@ -451,6 +463,8 @@ namespace BetterBepInEx
         // far into it; the next Layout scrolls to that row wherever the new heights put it.
 
         private const float ListMovingSeconds = 0.2f;
+
+        private static readonly object ConflictHeadingKey = new object();
 
         private readonly VirtualList _virtual = new VirtualList();
         private readonly Dictionary<object, float> _heights = new Dictionary<object, float>();
@@ -722,7 +736,15 @@ namespace BetterBepInEx
             else if (b.Row != null)
             {
                 Rect known = !offscreen && i < _knownRun ? new Rect(0f, _virtual.Y(i), _rowWidth, _virtual.Height(i)) : default;
-                DrawRow(b.Row, b.PageName, b.First, b.Last, offscreen, known);
+                _drawingOffscreen = offscreen;
+                try
+                {
+                    DrawRow(b.Row, b.PageName, b.First, b.Last, offscreen, known);
+                }
+                finally
+                {
+                    _drawingOffscreen = false;
+                }
             }
             else if (b.Link != null)
             {

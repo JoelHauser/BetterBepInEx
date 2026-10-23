@@ -30,7 +30,7 @@ namespace BetterBepInEx
         public const string PluginName = "BetterBepInEx";
 
         /// <summary>Must match the csproj's Version. Two places, and they have to agree.</summary>
-        public const string PluginVersion = "0.4.11";
+        public const string PluginVersion = "1.0.0";
 
         private const string GameFontHint = "Bender";
 
@@ -148,6 +148,7 @@ namespace BetterBepInEx
             Favorites = Config.Bind("Window", "Favorites", string.Empty, new ConfigDescription("GUIDs of favourite mods.", null, "Hidden"));
             LastPage = Config.Bind("Window", "Last page", string.Empty, new ConfigDescription("The page open when the menu closed.", null, "Hidden"));
             RecentMods = Config.Bind("Window", "Recent mods", string.Empty, new ConfigDescription("GUIDs of mods opened most recently, newest first.", null, "Hidden"));
+            DropOldEntries();
 
             _stock = new StockManager();
             if (!_stock.Resolve(Logger))
@@ -230,6 +231,36 @@ namespace BetterBepInEx
         }
 
         private static bool SkipStockWindow() => !Active;
+
+        /// <summary>
+        /// Keys earlier versions saved and nothing reads now: the old window rect, and the mod
+        /// renames and hides 0.4.7 removed. BepInEx keeps unbound keys and writes them back on
+        /// every save, so they are dropped from its orphan list once, then saved.
+        /// </summary>
+        private void DropOldEntries()
+        {
+            try
+            {
+                PropertyInfo orphansProperty = AccessTools.Property(typeof(ConfigFile), "OrphanedEntries");
+                if (!(orphansProperty?.GetValue(Config, null) is Dictionary<ConfigDefinition, string> orphans))
+                {
+                    return;
+                }
+                bool removed = false;
+                foreach (string key in new[] { "Rect", "Renamed mods", "Hidden mods" })
+                {
+                    removed |= orphans.Remove(new ConfigDefinition("Window", key));
+                }
+                if (removed)
+                {
+                    Config.Save();
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning("Could not drop old settings from the .cfg: " + ex.Message);
+            }
+        }
 
         /// <summary>
         /// The stock plugin rebuilds its whole list on every open: a FindObjectsOfType scan, a

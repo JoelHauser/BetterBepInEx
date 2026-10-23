@@ -631,7 +631,8 @@ namespace BetterBepInEx
             if (_countsDirty)
             {
                 _countsDirty = false;
-                Version++;
+                _previousChanged.Clear();
+                _previousChanged.AddRange(ChangedRows);
                 ChangedCount = 0;
                 ChangedRows.Clear();
                 foreach (Page page in Pages)
@@ -656,13 +657,62 @@ namespace BetterBepInEx
                     }
                     ChangedCount += page.ChangedCount;
                 }
+                // Lists are rebuilt only when what they could show changed: a mod writing one of
+                // its settings every frame must not rebuild the open list every frame.
+                if (!SameRows(_previousChanged, ChangedRows))
+                {
+                    Version++;
+                }
             }
             if (_keybindsDirty)
             {
                 _keybindsDirty = false;
-                Version++;
+                _previousKeybinds.Clear();
+                AppendKeybindShape(_previousKeybinds);
                 RebuildKeybinds(showHidden);
+                _currentKeybinds.Clear();
+                AppendKeybindShape(_currentKeybinds);
+                KeybindsVersion++;
+                // A conflict heading names its key, which may have changed with the same rows.
+                if (ConflictGroups.Count > 0 || !SameRows(_previousKeybinds, _currentKeybinds))
+                {
+                    Version++;
+                }
             }
+        }
+
+        /// <summary>Goes up each time the keybinds are worked out again: the conflict lists are new objects then.</summary>
+        public int KeybindsVersion;
+
+        private readonly List<Row> _previousChanged = new List<Row>();
+        private readonly List<Row> _previousKeybinds = new List<Row>();
+        private readonly List<Row> _currentKeybinds = new List<Row>();
+
+        /// <summary>The keybind rows, then each conflict group after a null: enough to tell whether anything shown moved.</summary>
+        private void AppendKeybindShape(List<Row> into)
+        {
+            into.AddRange(KeybindRows);
+            foreach (List<Row> group in ConflictGroups)
+            {
+                into.Add(null);
+                into.AddRange(group);
+            }
+        }
+
+        private static bool SameRows(List<Row> a, List<Row> b)
+        {
+            if (a.Count != b.Count)
+            {
+                return false;
+            }
+            for (int i = 0; i < a.Count; i++)
+            {
+                if (a[i] != b[i])
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         public void MarkCountsDirty() => _countsDirty = true;

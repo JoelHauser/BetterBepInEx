@@ -176,25 +176,23 @@ namespace BetterBepInEx
             // so nothing appearing above it mid-drag (the Reset link) can make it let go.
             int id = GUIUtility.GetControlID(SliderHint, FocusType.Passive, r);
             Event e = Event.current;
-            switch (sliding ? e.type : e.GetTypeForControl(id))
+            // Not in the offscreen measuring pass: the track is 100000 px to the left there, and the
+            // held thumb would jump to wherever that puts the mouse.
+            switch (_drawingOffscreen ? EventType.Ignore : sliding ? e.type : e.GetTypeForControl(id))
             {
                 case EventType.MouseDown when e.button == 0 && GUI.enabled && max > min && r.Contains(e.mousePosition):
                     BeginSlide(row);
-                    GUIUtility.hotControl = id;
+                    GrabSlider(id);
                     sliding = true;
                     SlideTo(row, Mathf.Lerp(min, max, Mathf.Clamp01((e.mousePosition.x - left) / width)), min, max, type, value);
                     e.Use();
                     break;
                 case EventType.MouseDrag when sliding:
-                    GUIUtility.hotControl = id;
+                    GrabSlider(id);
                     SlideTo(row, Mathf.Lerp(min, max, Mathf.Clamp01((e.mousePosition.x - left) / width)), min, max, type, value);
                     e.Use();
                     break;
-                case EventType.MouseUp when sliding:
-                    if (GUIUtility.hotControl == id)
-                    {
-                        GUIUtility.hotControl = 0;
-                    }
+                case EventType.MouseUp when sliding && e.button == 0:
                     EndSlide();
                     sliding = false;
                     e.Use();
@@ -264,7 +262,20 @@ namespace BetterBepInEx
 
         /// <summary>The rounded value the thumb is on, not yet given to the setting; and when the thumb last moved.</summary>
         private object _slidePending;
+        private string _slidePendingText;
         private float _slideMovedAt;
+
+        /// <summary>The control id holding the mouse for the drag, as last given to hotControl; 0 when none.</summary>
+        private int _slideControl;
+
+        /// <summary>The row being drawn is in the offscreen measuring pass, not the list.</summary>
+        private bool _drawingOffscreen;
+
+        private void GrabSlider(int id)
+        {
+            GUIUtility.hotControl = id;
+            _slideControl = id;
+        }
 
         /// <summary>How long the thumb has to rest before the setting follows it mid-drag.</summary>
         private const float SlideApplyAfter = 0.15f;
@@ -312,7 +323,13 @@ namespace BetterBepInEx
             {
                 _editingRow = null;
             }
-            _slidePending = Equals(converted, _slideWritten ?? value) ? null : converted;
+            object pending = Equals(converted, _slideWritten ?? value) ? null : converted;
+            if (pending != null && !Equals(pending, _slidePending))
+            {
+                // Formatted once per new value, not on every event that draws it.
+                _slidePendingText = FormatValue(row, pending);
+            }
+            _slidePending = pending;
         }
 
         /// <summary>Gives the setting the thumb's value once the thumb has rested, so a pause in a drag previews it.</summary>
@@ -348,7 +365,7 @@ namespace BetterBepInEx
         /// <summary>The number shown beside a slider: where the thumb is while it is held.</summary>
         private string SlideText(Row row)
         {
-            return _slidePending != null ? FormatValue(row, _slidePending) : ShownValue(row);
+            return _slidePending != null ? _slidePendingText : ShownValue(row);
         }
 
         private void EndSlide()
@@ -359,6 +376,13 @@ namespace BetterBepInEx
             }
             ApplySlide();
             _slideRow = null;
+            // However the drag ends (release, undo, closing, a rebuild), the mouse is let go too:
+            // left on the slider's id, every other IMGUI control would ignore the mouse.
+            if (_slideControl != 0 && GUIUtility.hotControl == _slideControl)
+            {
+                GUIUtility.hotControl = 0;
+            }
+            _slideControl = 0;
             _model.History.EndGroup();
             ConfigFile file = _slideFile;
             _slideFile = null;
@@ -848,6 +872,12 @@ namespace BetterBepInEx
         /// </summary>
         public void Update()
         {
+            if (_slideRow != null && !Application.isFocused)
+            {
+                // Alt-tabbed mid-drag: the release happens outside the game and no MouseUp ever
+                // comes, so the drag ends here and the .cfg is saved.
+                EndSlide();
+            }
             ApplyRestingSlide();
             if (_capturing == null)
             {
