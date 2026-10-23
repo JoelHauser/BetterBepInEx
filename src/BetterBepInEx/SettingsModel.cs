@@ -105,6 +105,13 @@ namespace BetterBepInEx
         /// <summary>Clipboard id: GUID, section and key. Null when there is no config entry.</summary>
         public string Id;
 
+        /// <summary>
+        /// The value's text as the row's field shows it, and the value it was made from. Formatting
+        /// a number allocates a string, and the field is drawn several times a frame.
+        /// </summary>
+        public string ValueText;
+        public object ValueTextOf;
+
         private string _defaultSerialized;
 
         public void InitDefault()
@@ -174,6 +181,10 @@ namespace BetterBepInEx
         public string SortKey;
         public string Version;
         public string Author;
+        private string _authorUpper;
+
+        /// <summary>The author as the mods list heads a group with it, made once.</summary>
+        public string AuthorUpper => _authorUpper ?? (_authorUpper = Author?.ToUpperInvariant());
         public string Website;
         public BaseUnityPlugin Plugin;
         public readonly List<Section> Sections = new List<Section>();
@@ -228,6 +239,9 @@ namespace BetterBepInEx
         /// as pasting settings. A mod that writes its own config on a timer stays out of the history.
         /// </summary>
         public int RecordDepth;
+
+        /// <summary>Goes up whenever the rows, what changed, or the keybinds were worked out again.</summary>
+        public int Version;
 
         public bool Suppress;
 
@@ -321,6 +335,7 @@ namespace BetterBepInEx
             }
 
             Pages.Sort((a, b) => string.CompareOrdinal(a.SortKey, b.SortKey));
+            Version++;
             _countsDirty = true;
             _keybindsDirty = true;
         }
@@ -632,6 +647,7 @@ namespace BetterBepInEx
             if (_countsDirty)
             {
                 _countsDirty = false;
+                Version++;
                 ChangedCount = 0;
                 ChangedRows.Clear();
                 foreach (Page page in Pages)
@@ -660,6 +676,7 @@ namespace BetterBepInEx
             if (_keybindsDirty)
             {
                 _keybindsDirty = false;
+                Version++;
                 RebuildKeybinds(showHidden);
             }
         }

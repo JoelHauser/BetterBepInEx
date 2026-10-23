@@ -30,7 +30,7 @@ namespace BetterBepInEx
         public const string PluginName = "BetterBepInEx";
 
         /// <summary>Must match the csproj's Version. Two places, and they have to agree.</summary>
-        public const string PluginVersion = "0.4.3";
+        public const string PluginVersion = "0.4.4";
 
         private const string GameFontHint = "Bender";
 
@@ -63,6 +63,7 @@ namespace BetterBepInEx
         private StockManager _stock;
         private SettingsModel _model;
         private MenuWindow _menu;
+        private MenuHost _host;
         private readonly InputBlocker _blocker = new InputBlocker();
         private Harmony _harmony;
         private bool _ready;
@@ -175,6 +176,10 @@ namespace BetterBepInEx
                 return;
             }
 
+            _host = gameObject.AddComponent<MenuHost>();
+            _host.Menu = _menu;
+            _host.enabled = false;
+
             _ready = true;
             Logger.LogInfo(PluginName + " " + PluginVersion + " loaded"
                            + (_blocker.Available ? "." : ", without holding the raid player still."));
@@ -286,9 +291,11 @@ namespace BetterBepInEx
                 // opened; this covers switching over from the stock window while it is open.
                 RebuildIfChanged();
                 _menu.OnOpen();
+                _host.enabled = true;
             }
             else if (!open && _open)
             {
+                _host.enabled = false;
                 _menu.OnClose();
                 _blocker.Release();
             }
@@ -309,13 +316,6 @@ namespace BetterBepInEx
             _menu.Update();
         }
 
-        private void OnGUI()
-        {
-            if (_ready && _open)
-            {
-                _menu.OnGUI();
-            }
-        }
 
         internal float EffectiveScale()
         {

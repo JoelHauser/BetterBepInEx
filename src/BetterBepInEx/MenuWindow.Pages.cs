@@ -29,7 +29,43 @@ namespace BetterBepInEx
         private static readonly GUIContent HiddenTag = new GUIContent("HIDDEN",
             "Its mod hides this setting from the menu. Change it only if you know what it does.");
 
-        private static readonly string[] FilterNames = { "All", "Changed", "Toggles", "Numbers", "Lists", "Keybinds", "Text", "Other" };
+        private static readonly string[] FilterNames = { "All  ", "Changed  ", "Toggles  ", "Numbers  ", "Lists  ", "Keybinds  ", "Text  ", "Other  " };
+
+        private static readonly GUIContent RenameLabel = new GUIContent("Rename", "Give this mod a different name in the list");
+        private static readonly GUIContent HideLabel = new GUIContent("Hide", "Hide this mod from the mods list");
+        private static readonly GUIContent ShowInListLabel = new GUIContent("Show in list");
+        private static readonly GUIContent PasteAllLabel = new GUIContent("Paste", "Apply settings copied from this menu, for every mod they cover");
+
+        /// <summary>What a list was last built from. The same again means the same rows, so it is not built again.</summary>
+        private struct ListSource
+        {
+            public object Of;
+            public RowFilter Filter;
+            public SearchQuery Query;
+            public int Flags;
+            public int Model;
+            public int Stamp;
+        }
+
+        private ListSource _countedFrom;
+        private ListSource _listedFrom;
+
+        /// <summary>
+        /// True when a list built from <paramref name="of"/> now may differ from the last one built
+        /// (which is then noted as this one). Settings changing value, a new search, Show hidden and
+        /// renames all show up in the model's version or <see cref="_listStamp"/>.
+        /// </summary>
+        private bool Stale(ref ListSource last, object of)
+        {
+            int flags = (ShowHidden ? 1 : 0) | (ShowAdvanced ? 2 : 0);
+            if (ReferenceEquals(last.Of, of) && last.Filter == _filter && ReferenceEquals(last.Query, _query) && last.Flags == flags
+                && last.Model == _model.Version && last.Stamp == _listStamp)
+            {
+                return false;
+            }
+            last = new ListSource { Of = of, Filter = _filter, Query = _query, Flags = flags, Model = _model.Version, Stamp = _listStamp };
+            return true;
+        }
 
         private const string PageSearch = "@search";
 
@@ -114,9 +150,9 @@ namespace BetterBepInEx
         /// </summary>
         private void DrawFilterBar(List<Row> rows)
         {
-            // Counted on Layout only: a search can list thousands of rows, and the chips drawn
-            // have to stay the same for the event that follows.
-            if (Event.current.type == EventType.Layout)
+            // Counted on Layout only, and only when the rows may have changed: a search can list
+            // thousands of them, and the chips drawn have to stay the same for the event that follows.
+            if (Event.current.type == EventType.Layout && Stale(ref _countedFrom, rows))
             {
                 Array.Clear(_filterCounts, 0, _filterCounts.Length);
                 _filterHiddenCount = 0;
@@ -151,7 +187,7 @@ namespace BetterBepInEx
                     continue;
                 }
                 bool on = _filter == f;
-                if (GUILayout.Button(CountedLabel(FilterNames[i] + "  ", _filterCounts[i], 10 + i), on ? _skin.ChipOn : _skin.Chip, GUILayout.ExpandWidth(false)))
+                if (GUILayout.Button(CountedLabel(FilterNames[i], _filterCounts[i], 10 + i), on ? _skin.ChipOn : _skin.Chip, NoExpand))
                 {
                     _filter = on && f != RowFilter.All ? RowFilter.All : f;
                 }
@@ -165,7 +201,7 @@ namespace BetterBepInEx
                 GUIContent label = on
                     ? CountedLabel("Hide hidden  ", hiddenCount, 20)
                     : CountedLabel("Show hidden  ", hiddenCount, 21);
-                if (GUILayout.Button(label, on ? _skin.ChipOn : _skin.Chip, GUILayout.ExpandWidth(false)))
+                if (GUILayout.Button(label, on ? _skin.ChipOn : _skin.Chip, NoExpand))
                 {
                     ToggleHidden();
                 }
@@ -185,33 +221,32 @@ namespace BetterBepInEx
             GUILayout.FlexibleSpace();
 
             bool favorite = _favorites.Contains(page.Guid);
-            if (GUILayout.Button(favorite ? "Favorite" : "Add to favorites", favorite ? _skin.ChipOn : _skin.Ghost, GUILayout.ExpandWidth(false)))
+            if (GUILayout.Button(favorite ? "Favorite" : "Add to favorites", favorite ? _skin.ChipOn : _skin.Ghost, NoExpand))
             {
                 ToggleFavorite(page);
             }
-            if (_renaming != page && GUILayout.Button(new GUIContent("Rename", "Give this mod a different name in the list"), _skin.Ghost, GUILayout.ExpandWidth(false)))
+            if (_renaming != page && GUILayout.Button(RenameLabel, _skin.Ghost, NoExpand))
             {
                 StartRename(page);
             }
-            if (GUILayout.Button(page.UserHidden ? new GUIContent("Show in list") : new GUIContent("Hide", "Hide this mod from the mods list"),
-                    page.UserHidden ? _skin.ChipOn : _skin.Ghost, GUILayout.ExpandWidth(false)))
+            if (GUILayout.Button(page.UserHidden ? ShowInListLabel : HideLabel, page.UserHidden ? _skin.ChipOn : _skin.Ghost, NoExpand))
             {
                 ToggleUserHidden(page);
             }
-            if (page.Website != null && GUILayout.Button(Cached("Website"), _skin.Ghost, GUILayout.ExpandWidth(false)))
+            if (page.Website != null && GUILayout.Button(Cached("Website"), _skin.Ghost, NoExpand))
             {
                 Application.OpenURL(page.Website);
             }
-            if (GUILayout.Button(Cached("Copy"), _skin.Ghost, GUILayout.ExpandWidth(false)))
+            if (GUILayout.Button(Cached("Copy"), _skin.Ghost, NoExpand))
             {
                 CopyRows(page.Rows, page.DisplayName + " " + page.Version);
             }
-            if (GUILayout.Button(Cached("Paste"), _skin.Ghost, GUILayout.ExpandWidth(false)))
+            if (GUILayout.Button(Cached("Paste"), _skin.Ghost, NoExpand))
             {
                 Paste(page);
             }
             GUI.enabled = page.ChangedCount > 0;
-            if (Confirm("reset:" + page.Guid, "Reset mod", "Reset " + page.ChangedCount + "?", _skin.GhostDanger, GUILayout.ExpandWidth(false)))
+            if (Confirm(page, "Reset mod", "Reset ", page.ChangedCount, _skin.GhostDanger, NoExpand))
             {
                 ResetRows(page.Rows, "reset " + page.DisplayName);
             }
@@ -220,7 +255,7 @@ namespace BetterBepInEx
 
             DrawFilterBar(page.Rows);
 
-            if (BuildingList())
+            if (BuildingList(page.Guid))
             {
                 int listed = 0;
                 bool sectionNames = page.Sections.Count > 1 || page.Sections.Count == 1 && page.Sections[0].Name.Length > 0;
@@ -244,7 +279,7 @@ namespace BetterBepInEx
         {
             Header(Cached("Search"), CountedLabel("Settings matching your search:  ", _searchResults.Count, 30));
             DrawFilterBar(_searchResults);
-            if (BuildingList() && AddByPage(_searchResults, null) == 0)
+            if (BuildingList(PageSearch) && AddByPage(_searchResults, null) == 0)
             {
                 _listEmpty = _searchResults.Count == 0
                     ? "Nothing matches. Every word has to appear in a mod's name, a setting's name, its section or its description."
@@ -262,16 +297,16 @@ namespace BetterBepInEx
             Header(Cached("Changed settings"), Cached("Every setting that is not at its default, across all mods."));
             GUILayout.EndVertical();
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button(new GUIContent("Paste", "Apply settings copied from this menu, for every mod they cover"), _skin.Ghost, GUILayout.ExpandWidth(false)))
+            if (GUILayout.Button(PasteAllLabel, _skin.Ghost, NoExpand))
             {
                 Paste(null);
             }
             GUI.enabled = _model.ChangedCount > 0;
-            if (GUILayout.Button(Cached("Copy"), _skin.Ghost, GUILayout.ExpandWidth(false)))
+            if (GUILayout.Button(Cached("Copy"), _skin.Ghost, NoExpand))
             {
                 CopyRows(_model.ChangedRows, "changed settings");
             }
-            if (Confirm("reset:@all", "Reset all", "Reset all " + _model.ChangedCount + "?", _skin.GhostDanger, GUILayout.ExpandWidth(false)))
+            if (Confirm(PageChanged, "Reset all", "Reset all ", _model.ChangedCount, _skin.GhostDanger, NoExpand))
             {
                 ResetRows(new List<Row>(_model.ChangedRows), "reset every mod");
             }
@@ -279,7 +314,7 @@ namespace BetterBepInEx
             GUILayout.EndHorizontal();
 
             DrawFilterBar(_model.ChangedRows);
-            if (BuildingList() && AddByPage(_model.ChangedRows, null) == 0)
+            if (BuildingList(PageChanged) && AddByPage(_model.ChangedRows, null) == 0)
             {
                 _listEmpty = _model.ChangedCount == 0 ? "Every setting is at its default." : "Nothing here matches the filter.";
             }
@@ -296,7 +331,7 @@ namespace BetterBepInEx
                 : "Every key bound by a mod. Keys that more than one setting uses come first; every mod bound to one reacts to it."));
             GUILayout.Space(U(6));
 
-            if (BuildingList())
+            if (BuildingList(PageKeybinds))
             {
                 _shownInConflicts.Clear();
                 int listed = 0;
@@ -349,15 +384,19 @@ namespace BetterBepInEx
         private readonly List<Block> _blocks = new List<Block>();
         private string _listEmpty;
 
-        /// <summary>True on Layout, when the page lists its blocks afresh; every other event draws the same ones.</summary>
-        private bool BuildingList()
+        /// <summary>
+        /// True on a Layout where the page should list its blocks afresh: the first for this list,
+        /// or once anything it shows may have changed. Every other event draws the blocks as they are.
+        /// </summary>
+        private bool BuildingList(string key)
         {
-            if (Event.current.type != EventType.Layout)
+            if (Event.current.type != EventType.Layout || !Stale(ref _listedFrom, key))
             {
                 return false;
             }
             _blocks.Clear();
             _listEmpty = null;
+            _blocksChanged = true;
             return true;
         }
 
@@ -444,6 +483,10 @@ namespace BetterBepInEx
         /// <summary>Heights of rows drawn with their mod's name over them (the Keybinds page's conflicts).</summary>
         private readonly Dictionary<object, float> _pagedHeights = new Dictionary<object, float>();
 
+        /// <summary>The blocks, or a height, changed since the positions were last worked out.</summary>
+        private bool _blocksChanged;
+        private bool _heightsChanged;
+
         private float _plainRowSum;
         private int _plainRowCount;
         private float _headerSum;
@@ -480,6 +523,7 @@ namespace BetterBepInEx
         {
             _heights.Clear();
             _pagedHeights.Clear();
+            _heightsChanged = true;
             _plainRowSum = 0f;
             _plainRowCount = 0;
             _headerSum = 0f;
@@ -515,27 +559,34 @@ namespace BetterBepInEx
             _listFilter = _filter;
             _listQuery = _query;
 
-            GUIStyle desc = _skin.Description;
-            float charWidth = Mathf.Max(4f, (desc.fontSize > 0 ? desc.fontSize : U(13)) * 0.5f);
-            _descCharsPerLine = Mathf.Max(10f, (_rowWidth - _valueWidth - U(60)) / charWidth);
+            // Positions are worked out again only when a block or a height changed. Otherwise they
+            // are as they were, and so is the scroll position in them.
+            if (_blocksChanged || _heightsChanged)
+            {
+                _blocksChanged = false;
+                _heightsChanged = false;
+                GUIStyle desc = _skin.Description;
+                float charWidth = Mathf.Max(4f, (desc.fontSize > 0 ? desc.fontSize : U(13)) * 0.5f);
+                _descCharsPerLine = Mathf.Max(10f, (_rowWidth - _valueWidth - U(60)) / charWidth);
 
-            _virtual.Clear();
-            int anchor = -1;
-            for (int i = 0; i < _blocks.Count; i++)
-            {
-                Block b = _blocks[i];
-                _virtual.Add(HeightOf(b, out bool known), known);
-                if (anchor < 0 && _anchorRow != null && b.Row == _anchorRow && b.PageName == _anchorPaged)
+                _virtual.Clear();
+                int anchor = -1;
+                for (int i = 0; i < _blocks.Count; i++)
                 {
-                    anchor = i;
+                    Block b = _blocks[i];
+                    _virtual.Add(HeightOf(b, out bool known), known);
+                    if (anchor < 0 && _anchorRow != null && b.Row == _anchorRow && b.PageName == _anchorPaged)
+                    {
+                        anchor = i;
+                    }
                 }
-            }
-            if (anchor >= 0)
-            {
-                // A wheel scroll under way moves with the rows it is heading for.
-                float y = _virtual.Y(anchor) + _anchorOffset;
-                _wheelTarget += y - pos.y;
-                pos.y = y;
+                if (anchor >= 0)
+                {
+                    // A wheel scroll under way moves with the rows it is heading for.
+                    float y = _virtual.Y(anchor) + _anchorOffset;
+                    _wheelTarget += y - pos.y;
+                    pos.y = y;
+                }
             }
 
             float view = _listViewHeight > 0f ? _listViewHeight : _rect.height;
@@ -591,6 +642,7 @@ namespace BetterBepInEx
             Dictionary<object, float> heights = b.PageName ? _pagedHeights : _heights;
             bool first = !heights.ContainsKey(b.Key);
             heights[b.Key] = h;
+            _heightsChanged = true;
             if (!first)
             {
                 return;
@@ -630,7 +682,7 @@ namespace BetterBepInEx
             }
 
             Vector2 shown = GUILayout.BeginScrollView(pos, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, GUIStyle.none);
-            GUILayout.BeginVertical(GUILayout.Width(_rowWidth));
+            GUILayout.BeginVertical(W(_rowWidth));
             GUILayout.Space(_topSpace);
             for (int i = _virtual.First; i < _virtual.End; i++)
             {
@@ -654,7 +706,7 @@ namespace BetterBepInEx
             {
                 // Rows about to scroll into view from above, measured where nobody can see or click them.
                 GUILayout.BeginArea(new Rect(-100000f, 0f, _rowWidth, 1f));
-                GUILayout.BeginVertical(GUILayout.Width(_rowWidth));
+                GUILayout.BeginVertical(W(_rowWidth));
                 foreach (int i in _virtual.Offscreen)
                 {
                     DrawBlock(i, true);
@@ -699,14 +751,14 @@ namespace BetterBepInEx
             }
             else if (b.Link != null)
             {
-                if (GUILayout.Button(b.Header, b.Style, GUILayout.ExpandWidth(true)) && !offscreen)
+                if (GUILayout.Button(b.Header, b.Style, Expand) && !offscreen)
                 {
                     Select(b.Link.Guid);
                 }
             }
             else
             {
-                GUILayout.Label(b.Header, b.Style, GUILayout.ExpandWidth(true));
+                GUILayout.Label(b.Header, b.Style, Expand);
             }
 
             if (Event.current.type == EventType.Repaint)
@@ -850,7 +902,7 @@ namespace BetterBepInEx
                 {
                     row.ResetLabel = new GUIContent("Reset", "Back to " + DefaultText(row));
                 }
-                if (GUILayout.Button(row.ResetLabel, _skin.LinkButton, GUILayout.ExpandWidth(false)))
+                if (GUILayout.Button(row.ResetLabel, _skin.LinkButton, NoExpand))
                 {
                     CommitEdit();
                     _model.Write(row, row.Setting.DefaultValue);
@@ -865,7 +917,7 @@ namespace BetterBepInEx
             GUILayout.EndVertical();
 
             GUILayout.Space(U(20));
-            GUILayout.BeginVertical(GUILayout.Width(_valueWidth));
+            GUILayout.BeginVertical(W(_valueWidth));
             bool enabled = GUI.enabled;
             GUI.enabled = enabled && !row.IsReadOnly;
             if (_failedRows.Contains(row))
@@ -920,15 +972,15 @@ namespace BetterBepInEx
                 GUILayout.BeginHorizontal();
                 if (row.IsHidden)
                 {
-                    GUILayout.Label(HiddenTag, _skin.Tag, GUILayout.ExpandWidth(false));
+                    GUILayout.Label(HiddenTag, _skin.Tag, NoExpand);
                 }
                 if (advanced)
                 {
-                    GUILayout.Label(Cached("ADVANCED"), _skin.Tag, GUILayout.ExpandWidth(false));
+                    GUILayout.Label(Cached("ADVANCED"), _skin.Tag, NoExpand);
                 }
                 if (readOnly)
                 {
-                    GUILayout.Label(Cached("READ ONLY"), _skin.Tag, GUILayout.ExpandWidth(false));
+                    GUILayout.Label(Cached("READ ONLY"), _skin.Tag, NoExpand);
                 }
                 GUILayout.FlexibleSpace();
                 GUILayout.EndHorizontal();

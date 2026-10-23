@@ -65,12 +65,12 @@ namespace BetterBepInEx
                 case RowKind.Number:
                     GUILayout.BeginHorizontal();
                     GUILayout.FlexibleSpace();
-                    DrawEditField(row, _skin.NumberField, GUILayout.Width(Mathf.Min(U(140), _valueWidth)));
+                    DrawEditField(row, _skin.NumberField, W(Mathf.Min(U(140), _valueWidth)));
                     GUILayout.EndHorizontal();
                     break;
                 case RowKind.Text:
                 case RowKind.Converted:
-                    DrawEditField(row, _skin.TextField, GUILayout.ExpandWidth(true));
+                    DrawEditField(row, _skin.TextField, Expand);
                     break;
                 case RowKind.Enum:
                 case RowKind.List:
@@ -106,7 +106,7 @@ namespace BetterBepInEx
             bool value = row.Setting.Get() is bool b && b;
             GUILayout.BeginHorizontal();
             GUILayout.FlexibleSpace();
-            Rect r = GUILayoutUtility.GetRect(U(46), U(26), GUILayout.Width(U(46)), GUILayout.Height(U(26)));
+            Rect r = GUILayoutUtility.GetRect(U(46), U(26), Opts(Opt.Size, U(46), U(26)));
             if (GUI.Button(r, GUIContent.none, GUIStyle.none))
             {
                 _model.Write(row, !value);
@@ -159,7 +159,7 @@ namespace BetterBepInEx
             float current = ToFloat(value);
 
             GUILayout.BeginHorizontal();
-            Rect r = GUILayoutUtility.GetRect(U(80), U(30), _skin.Slider, GUILayout.ExpandWidth(true));
+            Rect r = GUILayoutUtility.GetRect(U(80), U(30), _skin.Slider, Expand);
             if (Event.current.type == EventType.Repaint)
             {
                 float thumb = _skin.SliderThumb.fixedWidth;
@@ -196,11 +196,11 @@ namespace BetterBepInEx
             if (row.Setting.ShowRangeAsPercent == true)
             {
                 float percent = max > min ? 100f * (current - min) / (max - min) : 0f;
-                GUILayout.Label(Mathf.Round(percent).ToString(CultureInfo.InvariantCulture) + "%", _skin.Label, GUILayout.Width(U(56)));
+                GUILayout.Label(CountedLabel(string.Empty, Mathf.RoundToInt(percent), 40, "%"), _skin.Label, W(U(56)));
             }
             else
             {
-                DrawEditField(row, _skin.NumberField, GUILayout.Width(U(76)));
+                DrawEditField(row, _skin.NumberField, W(U(76)));
             }
             GUILayout.EndHorizontal();
         }
@@ -258,8 +258,8 @@ namespace BetterBepInEx
         /// </summary>
         private void DrawEditField(Row row, GUIStyle style, params GUILayoutOption[] options)
         {
-            bool focused = GUI.GetNameOfFocusedControl() == row.ControlName;
-            string shown = _editingRow == row ? _editBuffer : FormatValue(row);
+            bool focused = _focusedName == row.ControlName;
+            string shown = _editingRow == row ? _editBuffer : ShownValue(row);
             GUI.SetNextControlName(row.ControlName);
             string typed = GUILayout.TextField(shown ?? string.Empty, style, options);
             if (typed != shown)
@@ -279,9 +279,27 @@ namespace BetterBepInEx
             }
         }
 
-        private static string FormatValue(Row row)
+        /// <summary>The value's text for the row's field, formatted again only when the value changes.</summary>
+        private static string ShownValue(Row row)
         {
             object value = row.Setting.Get();
+            if (!(value is ValueType) && !(value is string))
+            {
+                // A mod's own type may change inside without becoming a different object.
+                return FormatValue(row, value);
+            }
+            if (row.ValueText == null || !Equals(value, row.ValueTextOf))
+            {
+                row.ValueText = FormatValue(row, value);
+                row.ValueTextOf = value;
+            }
+            return row.ValueText;
+        }
+
+        private static string FormatValue(Row row) => FormatValue(row, row.Setting.Get());
+
+        private static string FormatValue(Row row, object value)
+        {
             if (value == null)
             {
                 return string.Empty;
@@ -373,7 +391,7 @@ namespace BetterBepInEx
             int index = IndexOf(row.Options, value);
             GUIContent label = index >= 0 ? row.OptionLabels[index] : Cached(SettingsModel.OptionText(value));
 
-            Rect r = GUILayoutUtility.GetRect(label, _skin.Dropdown, GUILayout.ExpandWidth(true));
+            Rect r = GUILayoutUtility.GetRect(label, _skin.Dropdown, Expand);
             bool open = _popup != null && _popup.Row == row;
             if (GUI.Button(r, label, _skin.Dropdown))
             {
@@ -476,7 +494,7 @@ namespace BetterBepInEx
                 popup.Scroll = GUILayout.BeginScrollView(popup.Scroll, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, GUIStyle.none);
                 for (int i = 0; i < popup.Labels.Length; i++)
                 {
-                    if (GUILayout.Button(popup.Labels[i], i == popup.Selected ? _skin.PopupItemActive : _skin.PopupItem, GUILayout.ExpandWidth(true)))
+                    if (GUILayout.Button(popup.Labels[i], i == popup.Selected ? _skin.PopupItemActive : _skin.PopupItem, Expand))
                     {
                         ClosePopup();
                         popup.OnPick(i);
@@ -528,7 +546,7 @@ namespace BetterBepInEx
                     used = 0f;
                 }
                 used += w;
-                if (GUILayout.Button(row.OptionLabels[i], style, GUILayout.ExpandWidth(false)))
+                if (GUILayout.Button(row.OptionLabels[i], style, NoExpand))
                 {
                     long next = on ? current & ~bit : current | bit;
                     _model.Write(row, Enum.ToObject(type, next));
@@ -553,7 +571,7 @@ namespace BetterBepInEx
 
             GUILayout.BeginHorizontal();
             GUIStyle field = capturing ? _skin.KeyFieldActive : _skin.KeyField;
-            Rect r = GUILayoutUtility.GetRect(U(120), field.fixedHeight, field, GUILayout.ExpandWidth(true));
+            Rect r = GUILayoutUtility.GetRect(U(120), field.fixedHeight, field, Expand);
             if (GUI.Button(r, KeyTip, field))
             {
                 if (capturing)
@@ -762,7 +780,7 @@ namespace BetterBepInEx
         {
             Color color = row.Setting.Get() is Color c ? c : Color.white;
             GUILayout.BeginHorizontal();
-            Rect swatch = GUILayoutUtility.GetRect(U(40), U(30), GUILayout.Width(U(40)), GUILayout.Height(U(30)));
+            Rect swatch = GUILayoutUtility.GetRect(U(40), U(30), Opts(Opt.Size, U(40), U(30)));
             if (Event.current.type == EventType.Repaint)
             {
                 _skin.Fill(swatch, Skin.InputBorder);
@@ -770,11 +788,16 @@ namespace BetterBepInEx
             }
             GUILayout.Space(U(6));
 
-            string hex = "#" + ColorUtility.ToHtmlStringRGBA(color);
-            bool focused = GUI.GetNameOfFocusedControl() == row.ControlName;
+            if (row.ValueText == null || !(row.ValueTextOf is Color shownColor) || shownColor != color)
+            {
+                row.ValueText = "#" + ColorUtility.ToHtmlStringRGBA(color);
+                row.ValueTextOf = color;
+            }
+            string hex = row.ValueText;
+            bool focused = _focusedName == row.ControlName;
             string shown = focused && _colorEditRow == row ? _colorEditBuffer : hex;
             GUI.SetNextControlName(row.ControlName);
-            string typed = GUILayout.TextField(shown, _skin.TextField, GUILayout.ExpandWidth(true));
+            string typed = GUILayout.TextField(shown, _skin.TextField, Expand);
             if (typed != shown)
             {
                 _colorEditRow = row;
@@ -791,7 +814,7 @@ namespace BetterBepInEx
             }
 
             bool expanded = _expandedColors.Contains(row);
-            if (GUILayout.Button(expanded ? "Done" : "RGBA", expanded ? _skin.ChipOn : _skin.Chip, GUILayout.ExpandWidth(false)))
+            if (GUILayout.Button(Cached(expanded ? "Done" : "RGBA"), expanded ? _skin.ChipOn : _skin.Chip, NoExpand))
             {
                 if (!_expandedColors.Remove(row))
                 {
@@ -817,8 +840,8 @@ namespace BetterBepInEx
         private float ChannelSlider(string label, float value)
         {
             GUILayout.BeginHorizontal();
-            GUILayout.Label(label, _skin.Small, GUILayout.Width(U(16)));
-            Rect r = GUILayoutUtility.GetRect(U(60), U(30), _skin.Slider, GUILayout.ExpandWidth(true));
+            GUILayout.Label(Cached(label), _skin.Small, W(U(16)));
+            Rect r = GUILayoutUtility.GetRect(U(60), U(30), _skin.Slider, Expand);
             if (Event.current.type == EventType.Repaint)
             {
                 float thumb = _skin.SliderThumb.fixedWidth;
@@ -827,7 +850,7 @@ namespace BetterBepInEx
                 _skin.SliderFill.Draw(new Rect(track.x, track.y, Mathf.Max(U(6), track.width * value), track.height), false, false, false, false);
             }
             float v = GUI.HorizontalSlider(r, value, 0f, 1f, _skin.Slider, _skin.SliderThumb);
-            GUILayout.Label(Mathf.RoundToInt(v * 255f).ToString(CultureInfo.InvariantCulture), _skin.Small, GUILayout.Width(U(32)));
+            GUILayout.Label(CountLabel(Mathf.RoundToInt(v * 255f)), _skin.Small, W(U(32)));
             GUILayout.EndHorizontal();
             // Only snap to 1/255 when the slider moved; snapping an untouched 0.3 would write the
             // setting on every frame the sliders are open.

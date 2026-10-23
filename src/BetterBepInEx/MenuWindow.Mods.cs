@@ -112,6 +112,7 @@ namespace BetterBepInEx
             _conflictLabels.Clear();
             _searchDirty = true;
             _searchResultsFor = null;
+            _listStamp++;
             _sortDirty = true;
         }
 
@@ -255,21 +256,21 @@ namespace BetterBepInEx
             }
             GUILayout.BeginHorizontal();
             GUI.SetNextControlName(RenameControl);
-            _renameBuffer = GUILayout.TextField(_renameBuffer ?? string.Empty, _skin.RenameField, GUILayout.MinWidth(U(240)), GUILayout.MaxWidth(U(460)));
+            _renameBuffer = GUILayout.TextField(_renameBuffer ?? string.Empty, _skin.RenameField, Opts(Opt.MinMaxWidth, U(240), U(460)));
             if (_focusRename)
             {
                 GUI.FocusControl(RenameControl);
                 _focusRename = false;
             }
-            if (GUILayout.Button("Save", _skin.ButtonAccent, GUILayout.ExpandWidth(false)))
+            if (GUILayout.Button("Save", _skin.ButtonAccent, NoExpand))
             {
                 CommitRename();
             }
-            if (GUILayout.Button("Cancel", _skin.Ghost, GUILayout.ExpandWidth(false)))
+            if (GUILayout.Button("Cancel", _skin.Ghost, NoExpand))
             {
                 _renaming = null;
             }
-            if (page.CustomName != null && GUILayout.Button("Use its own name", _skin.Ghost, GUILayout.ExpandWidth(false)))
+            if (page.CustomName != null && GUILayout.Button("Use its own name", _skin.Ghost, NoExpand))
             {
                 _renameBuffer = string.Empty;
                 CommitRename();

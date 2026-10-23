@@ -62,7 +62,7 @@ namespace BetterBepInEx
         private bool _statusIsError;
         private float _statusTime;
 
-        private string _confirmKey;
+        private object _confirmKey;
         private float _confirmTime;
 
         private readonly HashSet<string> _favorites = new HashSet<string>(StringComparer.Ordinal);
@@ -76,6 +76,72 @@ namespace BetterBepInEx
         private Rect _lastStockRect;
         private Vector2 _lastStockColumns;
 
+        // GUILayout options are objects, and each call's params array is another: made once here
+        // rather than several times per row on every event.
+        private static readonly GUILayoutOption[] Expand = { GUILayout.ExpandWidth(true) };
+        private static readonly GUILayoutOption[] NoExpand = { GUILayout.ExpandWidth(false) };
+        private readonly Dictionary<Vector3, GUILayoutOption[]> _options = new Dictionary<Vector3, GUILayoutOption[]>();
+
+        private enum Opt
+        {
+            Width = 1,
+            Size,
+            NoExpandHeight,
+            MinMaxWidth,
+            SearchWidth,
+        }
+
+        private GUILayoutOption[] Opts(Opt kind, float a, float b = 0f)
+        {
+            Vector3 key = new Vector3((float)kind, a, b);
+            if (_options.TryGetValue(key, out GUILayoutOption[] options))
+            {
+                return options;
+            }
+            if (_options.Count > 512)
+            {
+                // Resizing the window makes new widths every frame.
+                _options.Clear();
+            }
+            switch (kind)
+            {
+                case Opt.Width:
+                    options = new[] { GUILayout.Width(a) };
+                    break;
+                case Opt.Size:
+                    options = new[] { GUILayout.Width(a), GUILayout.Height(b) };
+                    break;
+                case Opt.NoExpandHeight:
+                    options = new[] { GUILayout.ExpandWidth(false), GUILayout.Height(a) };
+                    break;
+                case Opt.MinMaxWidth:
+                    options = new[] { GUILayout.MinWidth(a), GUILayout.MaxWidth(b) };
+                    break;
+                default:
+                    options = new[] { GUILayout.MinWidth(a), GUILayout.MaxWidth(b), GUILayout.ExpandWidth(true) };
+                    break;
+            }
+            _options[key] = options;
+            return options;
+        }
+
+        private GUILayoutOption[] W(float width) => Opts(Opt.Width, width);
+
+        private readonly GUI.WindowFunction _drawBackdrop;
+        private readonly GUI.WindowFunction _drawWindow;
+        private readonly GUI.WindowFunction _drawPopup;
+
+        /// <summary>The focused control's name, read once per event: Unity makes a new string each time it is asked.</summary>
+        private string _focusedName = string.Empty;
+
+        private int _inputResetFrame = -1;
+
+        /// <summary>
+        /// Bumped whenever what a list shows may have changed other than through the model (a new
+        /// search, Show hidden, a rename), so the page lists its rows again.
+        /// </summary>
+        private int _listStamp;
+
         private static readonly GUIContent CloseLabel = new GUIContent("×", "Close (F12)");
         private static readonly GUIContent SearchHint = new GUIContent("Search every setting   Ctrl+F");
         private static readonly GUIContent ModFilterHint = new GUIContent("Filter mods");
@@ -88,6 +154,9 @@ namespace BetterBepInEx
             _plugin = plugin;
             _stock = stock;
             _model = model;
+            _drawBackdrop = DrawBackdrop;
+            _drawWindow = DrawWindow;
+            _drawPopup = DrawPopup;
             foreach (string guid in (_plugin.Favorites.Value ?? string.Empty).Split('|'))
             {
                 if (guid.Length > 0)
@@ -111,6 +180,7 @@ namespace BetterBepInEx
         {
             _plugin.ShowHidden.Value = !_plugin.ShowHidden.Value;
             _model.MarkCountsDirty();
+            _listStamp++;
         }
 
         public void OnModelRebuilt()
@@ -119,6 +189,7 @@ namespace BetterBepInEx
             ApplyCustomizations();
             _searchDirty = true;
             _searchResultsFor = null;
+            _listStamp++;
             _failedRows.Clear();
             _conflictLabels.Clear();
             ResetVirtualization();
@@ -194,6 +265,7 @@ namespace BetterBepInEx
             {
                 _skin.Build(scale, font, options);
                 _countLabels.Clear();
+                _sideItemHeight = 0f;
                 ResetVirtualization();
             }
             GUI.skin = _skin.GuiSkin;
@@ -231,12 +303,12 @@ namespace BetterBepInEx
                 // plain GUI in this OnGUI they landed on top of the window: IMGUI paints windows
                 // first. In the background there is neither, so nothing catches clicks meant for
                 // the game.
-                GUI.Window(BackdropId, new Rect(0, 0, Screen.width, Screen.height), DrawBackdrop, GUIContent.none, GUIStyle.none);
+                GUI.Window(BackdropId, new Rect(0, 0, Screen.width, Screen.height), _drawBackdrop, GUIContent.none, GUIStyle.none);
                 GUI.BringWindowToBack(BackdropId);
             }
 
             GUI.color = new Color(1f, 1f, 1f, _alpha);
-            Rect moved = GUI.Window(WindowId, _rect, DrawWindow, GUIContent.none, _skin.Window);
+            Rect moved = GUI.Window(WindowId, _rect, _drawWindow, GUIContent.none, _skin.Window);
             GUI.color = Color.white;
             if (moved.position != _rect.position)
             {
@@ -246,7 +318,7 @@ namespace BetterBepInEx
 
             if (_popup != null)
             {
-                _popup.Rect = GUI.Window(PopupId, _popup.Rect, DrawPopup, GUIContent.none, _skin.Popup);
+                _popup.Rect = GUI.Window(PopupId, _popup.Rect, _drawPopup, GUIContent.none, _skin.Popup);
                 GUI.BringWindowToFront(PopupId);
             }
 
@@ -256,8 +328,10 @@ namespace BetterBepInEx
                 _focusWindow = false;
             }
 
-            if (!IsCapturing && !_stock.StockCapturingKey && !Passive)
+            if (!IsCapturing && !_stock.StockCapturingKey && !Passive && _inputResetFrame != Time.frameCount)
             {
+                // Once a frame: it holds for the rest of the frame, and OnGUI runs several times.
+                _inputResetFrame = Time.frameCount;
                 // What the stock menu does, kept for anything outside the raid player the game
                 // reads through Unity's axes. Never in the background: it makes every held key and
                 // mouse button read as released, and the cursor is free there, so whenever it sat
@@ -302,6 +376,7 @@ namespace BetterBepInEx
             GUI.color = new Color(1f, 1f, 1f, _alpha);
             try
             {
+                _focusedName = GUIUtility.keyboardControl == 0 ? string.Empty : GUI.GetNameOfFocusedControl();
                 HandleKeys(Event.current);
 
                 float titleHeight = _skin.T(34) + U(26);
@@ -421,16 +496,15 @@ namespace BetterBepInEx
         private void DrawTitleBar()
         {
             GUILayout.BeginHorizontal();
-            GUILayout.Label(TitleLabel, _skin.Title, GUILayout.ExpandWidth(false), GUILayout.Height(_skin.T(34)));
+            GUILayout.Label(TitleLabel, _skin.Title, Opts(Opt.NoExpandHeight, _skin.T(34)));
             GUILayout.Space(U(20));
 
-            string typed = SearchBox(SearchControl, _search, SearchHint, _skin.SearchField,
-                GUILayout.MinWidth(U(220)), GUILayout.MaxWidth(U(560)), GUILayout.ExpandWidth(true));
+            string typed = SearchBox(SearchControl, _search, SearchHint, _skin.SearchField, Opts(Opt.SearchWidth, U(220), U(560)));
             if (typed != _search)
             {
                 SetSearch(typed);
             }
-            if (_search.Length > 0 && GUILayout.Button("Clear", _skin.Ghost, GUILayout.ExpandWidth(false), GUILayout.Height(_skin.T(34))))
+            if (_search.Length > 0 && GUILayout.Button(Cached("Clear"), _skin.Ghost, Opts(Opt.NoExpandHeight, _skin.T(34))))
             {
                 SetSearch(string.Empty);
                 _focusSearch = true;
@@ -445,13 +519,13 @@ namespace BetterBepInEx
 
             GUI.enabled = _model.History.CanUndo;
             UndoLabel.tooltip = UndoTip();
-            if (GUILayout.Button(UndoLabel, _skin.Ghost, GUILayout.ExpandWidth(false), GUILayout.Height(_skin.T(34))))
+            if (GUILayout.Button(UndoLabel, _skin.Ghost, Opts(Opt.NoExpandHeight, _skin.T(34))))
             {
                 Undo();
             }
             GUI.enabled = _model.History.CanRedo;
             RedoLabel.tooltip = RedoTip();
-            if (GUILayout.Button(RedoLabel, _skin.Ghost, GUILayout.ExpandWidth(false), GUILayout.Height(_skin.T(34))))
+            if (GUILayout.Button(RedoLabel, _skin.Ghost, Opts(Opt.NoExpandHeight, _skin.T(34))))
             {
                 Redo();
             }
@@ -474,7 +548,7 @@ namespace BetterBepInEx
                 Rect field = GUILayoutUtility.GetLastRect();
                 float icon = Mathf.Min(U(16), field.height - U(8));
                 _skin.Fill(new Rect(field.x + style.padding.left - icon - U(8), field.y + (field.height - icon) / 2f, icon, icon), Skin.MutedColor, _skin.SearchIcon);
-                if (text.Length == 0 && GUI.GetNameOfFocusedControl() != control)
+                if (text.Length == 0 && _focusedName != control)
                 {
                     _skin.Muted.Draw(new Rect(field.x + style.padding.left - U(2), field.y, field.width - style.padding.left, field.height),
                         hint, false, false, false, false);
@@ -483,16 +557,32 @@ namespace BetterBepInEx
             return typed;
         }
 
+        // The tooltips are rebuilt only when the next undo or redo changes, not on every event.
+        private string _undoTipFor;
+        private string _undoTip = "Nothing to undo";
+        private string _redoTipFor;
+        private string _redoTip = "Nothing to redo";
+
         private string UndoTip()
         {
             string label = _model.History.NextUndoLabel;
-            return label == null ? "Nothing to undo" : "Undo " + label + "  (Ctrl+Z)";
+            if (!ReferenceEquals(label, _undoTipFor))
+            {
+                _undoTipFor = label;
+                _undoTip = label == null ? "Nothing to undo" : "Undo " + label + "  (Ctrl+Z)";
+            }
+            return _undoTip;
         }
 
         private string RedoTip()
         {
             string label = _model.History.NextRedoLabel;
-            return label == null ? "Nothing to redo" : "Redo " + label + "  (Ctrl+Y)";
+            if (!ReferenceEquals(label, _redoTipFor))
+            {
+                _redoTipFor = label;
+                _redoTip = label == null ? "Nothing to redo" : "Redo " + label + "  (Ctrl+Y)";
+            }
+            return _redoTip;
         }
 
         private void SetSearch(string text)
@@ -517,10 +607,12 @@ namespace BetterBepInEx
                 // Typing on: every match is among the last ones, so only they are checked.
                 _searchResults.RemoveAll(row => !_query.Matches(row.Haystack));
                 _searchResultsFor = _query;
+                _listStamp++;
                 return;
             }
             _searchResults.Clear();
             _searchResultsFor = _query;
+            _listStamp++;
             foreach (Page page in _model.Pages)
             {
                 foreach (Row row in page.Rows)
@@ -535,9 +627,36 @@ namespace BetterBepInEx
 
         // ------------------------------------------------------------------ sidebar
 
+        /// <summary>One line of the mods list below its header: a mod, or an author's name when grouped by author.</summary>
+        private struct SideEntry
+        {
+            public Page Page;
+            public GUIContent Header;
+        }
+
+        // The mods list is built on Layout and kept for the event that follows, like the settings
+        // list, and only the lines in view are drawn: every line has a fixed height, so where each
+        // one falls is known without measuring its text.
+        private readonly List<Page> _sideFavorites = new List<Page>();
+        private readonly List<SideEntry> _sideEntries = new List<SideEntry>();
+        private int _sideShown;
+        private int _sideFirst;
+        private int _sideEnd;
+        private float _sideTopSpace;
+        private float _sideBottomSpace;
+
+        /// <summary>Where the mods list starts in the sidebar's scroll content, measured on Repaint.</summary>
+        private float _sideListTop;
+        private float _sideViewHeight = 2000f;
+        private float _sideItemHeight;
+        private float _sideHeaderHeight;
+
+        private float SideItemStep => _sideItemHeight + _skin.SidebarItem.margin.bottom;
+
         private void DrawSidebar()
         {
-            string typed = SearchBox(ModFilterControl, _modFilter, ModFilterHint, _skin.SidebarFilter, GUILayout.ExpandWidth(true));
+            EventType type = Event.current.type;
+            string typed = SearchBox(ModFilterControl, _modFilter, ModFilterHint, _skin.SidebarFilter, Expand);
             if (typed != _modFilter)
             {
                 _modFilter = typed;
@@ -545,35 +664,42 @@ namespace BetterBepInEx
             }
             GUILayout.Space(U(6));
 
+            if (_sideItemHeight <= 0f)
+            {
+                _sideItemHeight = _skin.SidebarItem.fixedHeight > 0f ? _skin.SidebarItem.fixedHeight : _skin.SidebarItem.CalcHeight(Cached("Ag"), 200f);
+                _sideHeaderHeight = _skin.SidebarHeader.CalcHeight(Cached("AG"), 200f);
+            }
+            List<Page> pages = SortedPages();
+            if (type == EventType.Layout)
+            {
+                BuildSidebar(pages);
+            }
+
+            Vector2 scroll = _sidebarScroll;
             _sidebarScroll = GUILayout.BeginScrollView(_sidebarScroll, false, false, GUIStyle.none, GUI.skin.verticalScrollbar, GUIStyle.none);
+            if (_sidebarScroll != scroll)
+            {
+                _listMovedAt = Time.realtimeSinceStartup;
+            }
 
             SidebarItem(PageChanged, "Changed settings", _model.ChangedCount, _skin.Badge);
             int conflicts = _model.ConflictGroups.Count;
             SidebarItem(PageKeybinds, "Keybinds", conflicts > 0 ? conflicts : 0, _skin.BadgeDanger);
 
-            SearchQuery filter = _modFilterQuery;
-
-            List<Page> pages = SortedPages();
-            bool anyFavorite = false;
-            foreach (Page page in pages)
+            if (_sideFavorites.Count > 0)
             {
-                if (!_favorites.Contains(page.Guid) || !SidebarShows(page, filter))
+                GUILayout.Label(Cached("FAVORITES"), _skin.SidebarHeader);
+                foreach (Page page in _sideFavorites)
                 {
-                    continue;
+                    SidebarPage(page);
                 }
-                if (!anyFavorite)
-                {
-                    GUILayout.Label("FAVORITES", _skin.SidebarHeader);
-                    anyFavorite = true;
-                }
-                SidebarPage(page);
             }
 
             GUILayout.BeginHorizontal();
             int listed = ShowHidden ? _model.Pages.Count : _model.Pages.Count - _hiddenListCount;
             GUILayout.Label(CountedLabel("MODS  ", listed, 1), _skin.SidebarHeader);
             GUILayout.FlexibleSpace();
-            if (GUILayout.Button(_modsChangedOnly ? "Changed only" : "All", _skin.SidebarToggle, GUILayout.ExpandWidth(false)))
+            if (GUILayout.Button(Cached(_modsChangedOnly ? "Changed only" : "All"), _skin.SidebarToggle, NoExpand))
             {
                 _modsChangedOnly = !_modsChangedOnly;
             }
@@ -585,39 +711,115 @@ namespace BetterBepInEx
                 GUIContent toggle = ShowHidden
                     ? CountedLabel("Hide hidden mods  ", _hiddenListCount, 5)
                     : CountedLabel("Show hidden mods  ", _hiddenListCount, 6);
-                if (GUILayout.Button(toggle, _skin.SidebarHiddenToggle, GUILayout.ExpandWidth(true)))
+                if (GUILayout.Button(toggle, _skin.SidebarHiddenToggle, Expand))
                 {
                     ToggleHidden();
                 }
             }
 
-            int shown = 0;
+            // A zero-height space: its top is where the list starts, past the margin above it.
+            GUILayout.Space(0f);
+            if (type == EventType.Repaint)
+            {
+                _sideListTop = GUILayoutUtility.GetLastRect().y;
+            }
+            if (type == EventType.Layout)
+            {
+                ArrangeSidebar(scroll.y);
+            }
+            GUILayout.Space(_sideTopSpace);
+            for (int i = _sideFirst; i < _sideEnd; i++)
+            {
+                SideEntry entry = _sideEntries[i];
+                if (entry.Page != null)
+                {
+                    SidebarPage(entry.Page);
+                }
+                else
+                {
+                    Rect r = GUILayoutUtility.GetRect(1f, _sideHeaderHeight, GUIStyle.none, Expand);
+                    if (type == EventType.Repaint)
+                    {
+                        _skin.SidebarHeader.Draw(r, entry.Header, false, false, false, false);
+                    }
+                }
+            }
+            GUILayout.Space(_sideBottomSpace);
+            if (_sideShown == 0)
+            {
+                GUILayout.Label(Cached(_modsChangedOnly ? "No mod has a changed setting." : "No mod matches."), _skin.Small);
+            }
+
+            GUILayout.EndScrollView();
+            if (type == EventType.Repaint)
+            {
+                _sideViewHeight = GUILayoutUtility.GetLastRect().height;
+            }
+        }
+
+        private void BuildSidebar(List<Page> pages)
+        {
+            SearchQuery filter = _modFilterQuery;
+            _sideFavorites.Clear();
+            _sideEntries.Clear();
+            _sideShown = 0;
             bool byAuthor = _sortedBy == ModSort.Author;
-            string lastAuthor = null;
+            GUIContent lastAuthor = null;
             foreach (Page page in pages)
             {
                 if (!SidebarShows(page, filter))
                 {
                     continue;
                 }
+                if (_favorites.Contains(page.Guid))
+                {
+                    _sideFavorites.Add(page);
+                }
                 if (byAuthor)
                 {
-                    string author = string.IsNullOrEmpty(page.Author) ? "OTHER" : page.Author.ToUpperInvariant();
+                    GUIContent author = Cached(string.IsNullOrEmpty(page.Author) ? "OTHER" : page.AuthorUpper);
                     if (author != lastAuthor)
                     {
-                        GUILayout.Label(Cached(author), _skin.SidebarHeader);
+                        _sideEntries.Add(new SideEntry { Header = author });
                         lastAuthor = author;
                     }
                 }
-                SidebarPage(page);
-                shown++;
+                _sideEntries.Add(new SideEntry { Page = page });
+                _sideShown++;
             }
-            if (shown == 0)
-            {
-                GUILayout.Label(_modsChangedOnly ? "No mod has a changed setting." : "No mod matches.", _skin.Small);
-            }
+        }
 
-            GUILayout.EndScrollView();
+        /// <summary>Picks the lines of the mods list in view. Headers and mods have fixed heights and no margins.</summary>
+        private void ArrangeSidebar(float scroll)
+        {
+            float step = SideItemStep;
+            float top = scroll - _sideListTop - step;
+            float bottom = scroll - _sideListTop + _sideViewHeight + step;
+            int count = _sideEntries.Count;
+            float y = 0f;
+            float drawnEnd = -1f;
+            _sideFirst = count;
+            _sideEnd = count;
+            for (int i = 0; i < count; i++)
+            {
+                float h = _sideEntries[i].Page != null ? step : _sideHeaderHeight;
+                if (_sideFirst == count && y + h > top)
+                {
+                    _sideFirst = i;
+                    _sideTopSpace = y;
+                }
+                if (_sideFirst < count && drawnEnd < 0f && y >= bottom)
+                {
+                    _sideEnd = i;
+                    drawnEnd = y;
+                }
+                y += h;
+            }
+            if (_sideFirst == count)
+            {
+                _sideTopSpace = y;
+            }
+            _sideBottomSpace = drawnEnd < 0f ? 0f : y - drawnEnd;
         }
 
         private bool SidebarShows(Page page, SearchQuery filter)
@@ -648,9 +850,14 @@ namespace BetterBepInEx
             }
         }
 
+        /// <summary>
+        /// One line of the sidebar. It takes its fixed height plus the gap below it, with no
+        /// margins, so a run of lines out of view is exactly a Space of their count times that.
+        /// </summary>
         private bool SidebarButton(GUIContent label, bool selected, int count, GUIStyle badgeStyle, bool dimmed)
         {
-            Rect r = GUILayoutUtility.GetRect(label, _skin.SidebarItem, GUILayout.ExpandWidth(true));
+            Rect slot = GUILayoutUtility.GetRect(1f, SideItemStep, GUIStyle.none, Expand);
+            Rect r = new Rect(slot.x, slot.y, slot.width, _sideItemHeight);
             if (selected && Event.current.type == EventType.Repaint)
             {
                 _skin.SidebarSelected.Draw(r, false, false, false, false);
@@ -676,7 +883,7 @@ namespace BetterBepInEx
             }
             Rect text = new Rect(r.x, r.y, r.width - badgeWidth, r.height);
             GUIStyle textStyle = selected ? _skin.SidebarTextActive : dimmed ? _skin.SidebarTextHidden : _skin.SidebarText;
-            textStyle.Draw(text, label, r.Contains(Event.current.mousePosition), false, false, false);
+            textStyle.Draw(text, label, !ListMoving && r.Contains(Event.current.mousePosition), false, false, false);
             return clicked;
         }
 
@@ -710,13 +917,13 @@ namespace BetterBepInEx
             return c;
         }
 
-        /// <summary>"prefix + count", cached per (slot, count) so labels cost no allocation per frame.</summary>
-        private GUIContent CountedLabel(string prefix, int count, int slot)
+        /// <summary>"prefix + count + suffix", cached per (slot, count) so labels cost no allocation per frame.</summary>
+        private GUIContent CountedLabel(string prefix, int count, int slot, string suffix = null)
         {
             int key = -(slot * 1000003 + count + 1);
             if (!_countLabels.TryGetValue(key, out GUIContent c))
             {
-                c = new GUIContent(prefix + count.ToString(CultureInfo.InvariantCulture));
+                c = new GUIContent(prefix + count.ToString(CultureInfo.InvariantCulture) + suffix);
                 _countLabels[key] = c;
             }
             return c;
@@ -754,9 +961,9 @@ namespace BetterBepInEx
                 _skin.Status.normal.textColor = old;
             }
             GUILayout.FlexibleSpace();
-            GUILayout.Label(CountedLabel("mods  ", _model.Pages.Count, 2), _skin.Status, GUILayout.ExpandWidth(false));
-            GUILayout.Label(CountedLabel("settings  ", _model.AllRows.Count, 3), _skin.Status, GUILayout.ExpandWidth(false));
-            GUILayout.Label(CountedLabel("changed  ", _model.ChangedCount, 4), _skin.Status, GUILayout.ExpandWidth(false));
+            GUILayout.Label(CountedLabel("mods  ", _model.Pages.Count, 2), _skin.Status, NoExpand);
+            GUILayout.Label(CountedLabel("settings  ", _model.AllRows.Count, 3), _skin.Status, NoExpand);
+            GUILayout.Label(CountedLabel("changed  ", _model.ChangedCount, 4), _skin.Status, NoExpand);
             GUILayout.Space(U(18));
             GUILayout.EndHorizontal();
         }
@@ -970,12 +1177,14 @@ namespace BetterBepInEx
 
         /// <summary>
         /// Two-click confirmation for anything that changes many settings at once. The first click
-        /// arms the button for four seconds and relabels it; the second does it.
+        /// arms the button for four seconds and relabels it "<paramref name="armedPrefix"/>N?"; the
+        /// second does it. The armed label is only made while armed.
         /// </summary>
-        private bool Confirm(string key, string label, string armedLabel, GUIStyle style, params GUILayoutOption[] options)
+        private bool Confirm(object key, string label, string armedPrefix, int count, GUIStyle style, params GUILayoutOption[] options)
         {
-            bool armed = _confirmKey == key && Time.realtimeSinceStartup - _confirmTime < 4f;
-            if (!GUILayout.Button(armed ? armedLabel : label, armed ? _skin.ButtonDanger : style, options))
+            bool armed = Equals(_confirmKey, key) && Time.realtimeSinceStartup - _confirmTime < 4f;
+            GUIContent content = armed ? Cached(armedPrefix + count + "?") : Cached(label);
+            if (!GUILayout.Button(content, armed ? _skin.ButtonDanger : style, options))
             {
                 return false;
             }
