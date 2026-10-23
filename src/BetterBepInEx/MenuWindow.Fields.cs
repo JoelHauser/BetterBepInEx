@@ -225,7 +225,7 @@ namespace BetterBepInEx
             }
             if (row.Setting.ShowRangeAsPercent == true)
             {
-                float percent = max > min ? 100f * (current - min) / (max - min) : 0f;
+                float percent = max > min ? 100f * ((_slideRow == row ? _slideValue : current) - min) / (max - min) : 0f;
                 GUILayout.Label(CountedLabel(string.Empty, Mathf.RoundToInt(percent), 40, "%"), _skin.Label, W(U(56)));
             }
             else
@@ -261,6 +261,13 @@ namespace BetterBepInEx
         private Row _slideRow;
         private float _slideValue;
         private object _slideWritten;
+
+        /// <summary>The rounded value the thumb is on, not yet given to the setting; and when the thumb last moved.</summary>
+        private object _slidePending;
+        private float _slideMovedAt;
+
+        /// <summary>How long the thumb has to rest before the setting follows it mid-drag.</summary>
+        private const float SlideApplyAfter = 0.15f;
         private bool _slideShowReset;
         private ConfigFile _slideFile;
         private bool _slideFileSaved;
@@ -272,6 +279,7 @@ namespace BetterBepInEx
             ClosePopup();
             _slideRow = row;
             _slideWritten = null;
+            _slidePending = null;
             _slideShowReset = row.IsChanged && row.CanReset;
             // The mod's .cfg is written once, on release, not on every step of the drag: BepInEx
             // saves the whole file on each change, which stutters a drag.
@@ -285,12 +293,18 @@ namespace BetterBepInEx
             _model.History.BeginGroup(row.Name.text);
         }
 
-        /// <summary>Moves the thumb to <paramref name="raw"/>, and the setting to its rounded value when that changes.</summary>
+        /// <summary>
+        /// Moves the thumb to <paramref name="raw"/>. The setting is not changed on every step: a
+        /// change runs the mod's own handlers, and some rebuild things on each one, which made the
+        /// game hitch on every step and the thumb lag the mouse. It follows when the thumb rests
+        /// for a moment (<see cref="ApplyRestingSlide"/>, from Update) and on release.
+        /// </summary>
         private void SlideTo(Row row, float raw, float min, float max, Type type, object value)
         {
             _slideValue = raw;
+            _slideMovedAt = Time.realtimeSinceStartup;
             object converted = FromFloat(Step(raw, min, max, type), type);
-            if (converted == null || Equals(converted, _slideWritten ?? value))
+            if (converted == null)
             {
                 return;
             }
@@ -298,8 +312,43 @@ namespace BetterBepInEx
             {
                 _editingRow = null;
             }
-            _model.Write(row, converted);
-            _slideWritten = converted;
+            _slidePending = Equals(converted, _slideWritten ?? value) ? null : converted;
+        }
+
+        /// <summary>Gives the setting the thumb's value once the thumb has rested, so a pause in a drag previews it.</summary>
+        private void ApplyRestingSlide()
+        {
+            if (_slideRow != null && _slidePending != null && Time.realtimeSinceStartup - _slideMovedAt >= SlideApplyAfter)
+            {
+                ApplySlide();
+            }
+        }
+
+        private void ApplySlide()
+        {
+            object value = _slidePending;
+            _slidePending = null;
+            if (value == null || Equals(value, _slideWritten))
+            {
+                return;
+            }
+            // Recorded into the drag's undo group, also when called from Update.
+            _model.RecordDepth++;
+            try
+            {
+                _model.Write(_slideRow, value);
+            }
+            finally
+            {
+                _model.RecordDepth--;
+            }
+            _slideWritten = value;
+        }
+
+        /// <summary>The number shown beside a slider: where the thumb is while it is held.</summary>
+        private string SlideText(Row row)
+        {
+            return _slidePending != null ? FormatValue(row, _slidePending) : ShownValue(row);
         }
 
         private void EndSlide()
@@ -308,6 +357,7 @@ namespace BetterBepInEx
             {
                 return;
             }
+            ApplySlide();
             _slideRow = null;
             _model.History.EndGroup();
             ConfigFile file = _slideFile;
@@ -364,7 +414,7 @@ namespace BetterBepInEx
         private void DrawEditField(Row row, GUIStyle style, params GUILayoutOption[] options)
         {
             bool focused = _focusedName == row.ControlName;
-            string shown = _editingRow == row ? _editBuffer : ShownValue(row);
+            string shown = _editingRow == row ? _editBuffer : _slideRow == row ? SlideText(row) : ShownValue(row);
             GUI.SetNextControlName(row.ControlName);
             string typed = GUILayout.TextField(shown ?? string.Empty, style, options);
             if (typed != shown)
@@ -803,6 +853,7 @@ namespace BetterBepInEx
             {
                 EndSlide();
             }
+            ApplyRestingSlide();
             if (_capturing == null)
             {
                 return;
