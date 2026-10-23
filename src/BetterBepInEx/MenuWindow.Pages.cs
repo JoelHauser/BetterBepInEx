@@ -189,20 +189,23 @@ namespace BetterBepInEx
             {
                 _chipsFilter = _filter;
                 _chipsShowHidden = ShowHidden;
+                if (modSearch)
+                {
+                    PlaceModSearch();
+                }
             }
-            int hiddenCount = _filterHiddenCount;
 
             GUILayout.Space(U(10));
             GUILayout.BeginHorizontal();
+            // Every chip's button is called on every event, shown or not (a hidden one gets an
+            // empty rect). IMGUI tells controls apart by the order they are called in, so a chip
+            // appearing ahead of the mod's search box, as deleting a letter widens the matches,
+            // would hand the box a new id and drop the focus mid-word.
             for (int i = 0; i < Filters.Length; i++)
             {
                 RowFilter f = Filters[i];
-                if (_filterCounts[i] == 0 && f != RowFilter.All && f != _chipsFilter)
-                {
-                    continue;
-                }
                 bool on = _chipsFilter == f;
-                if (GUILayout.Button(CountedLabel(FilterNames[i], _filterCounts[i], 10 + i), on ? _skin.ChipOn : _skin.Chip, NoExpand))
+                if (ChipButton(ChipShown(i), CountedLabel(FilterNames[i], _filterCounts[i], 10 + i), on ? _skin.ChipOn : _skin.Chip))
                 {
                     _filter = on && f != RowFilter.All ? RowFilter.All : f;
                 }
@@ -210,30 +213,89 @@ namespace BetterBepInEx
             GUILayout.FlexibleSpace();
             // The switch itself is in the title bar, on every page. Here, only what it would add
             // to this list, where there is something: most mods hide or mark advanced nothing.
-            if (hiddenCount > 0 && !_chipsShowHidden)
+            if (ChipButton(AdvancedChipShown, AdvancedChipLabel(), _skin.Chip))
             {
-                GUIContent label = CountedLabel("+", hiddenCount, 22, " advanced");
-                label.tooltip = "Settings this list leaves out. Click to turn on Show advanced.";
-                if (GUILayout.Button(label, _skin.Chip, NoExpand))
-                {
-                    ToggleHidden();
-                }
+                ToggleHidden();
             }
-            if (modSearch)
+            if (modSearch && !_modSearchWraps)
             {
                 GUILayout.Space(U(6));
-                string typed = SearchBox(ModSearchControl, _modSearch, ModSearchHint, _skin.SidebarFilter, out bool cleared, W(U(240)));
-                if (typed != _modSearch)
-                {
-                    SetModSearch(typed);
-                }
-                if (cleared)
-                {
-                    GUI.FocusControl(ModSearchControl);
-                }
+                DrawModSearch();
             }
             GUILayout.EndHorizontal();
+            if (modSearch && _modSearchWraps)
+            {
+                GUILayout.Space(U(6));
+                GUILayout.BeginHorizontal();
+                DrawModSearch();
+                GUILayout.FlexibleSpace();
+                GUILayout.EndHorizontal();
+            }
             GUILayout.Space(U(6));
+        }
+
+        private bool ChipShown(int i) => _filterCounts[i] > 0 || Filters[i] == RowFilter.All || Filters[i] == _chipsFilter;
+
+        private bool AdvancedChipShown => _filterHiddenCount > 0 && !_chipsShowHidden;
+
+        private GUIContent AdvancedChipLabel()
+        {
+            GUIContent label = CountedLabel("+", _filterHiddenCount, 22, " advanced");
+            label.tooltip = "Settings this list leaves out. Click to turn on Show advanced.";
+            return label;
+        }
+
+        private bool ChipButton(bool shown, GUIContent label, GUIStyle style)
+        {
+            if (!shown)
+            {
+                GUI.Button(Rect.zero, GUIContent.none, GUIStyle.none);
+                return false;
+            }
+            return GUI.Button(GUILayoutUtility.GetRect(label, style, NoExpand), label, style);
+        }
+
+        /// <summary>The mod's search box sits on the chips' line, or on a line of its own below them when they leave it too little room.</summary>
+        private bool _modSearchWraps;
+        private float _modSearchWidth;
+
+        /// <summary>
+        /// Sizes the mod's search box to the room the chips leave on their line, on Layout, so it
+        /// never runs past the window's edge: up to its full width, down to a minimum, and below
+        /// that onto a line of its own.
+        /// </summary>
+        private void PlaceModSearch()
+        {
+            float chips = 0f;
+            for (int i = 0; i < Filters.Length; i++)
+            {
+                if (ChipShown(i))
+                {
+                    GUIStyle style = Filters[i] == _chipsFilter ? _skin.ChipOn : _skin.Chip;
+                    chips += style.CalcSize(CountedLabel(FilterNames[i], _filterCounts[i], 10 + i)).x + style.margin.horizontal;
+                }
+            }
+            if (AdvancedChipShown)
+            {
+                chips += _skin.Chip.CalcSize(AdvancedChipLabel()).x + _skin.Chip.margin.horizontal;
+            }
+            // The list's row width, not the whole area: the box then ends where the rows do, clear of the scrollbar.
+            float room = _rowWidth - chips - U(6) - _skin.SidebarFilter.margin.horizontal;
+            _modSearchWraps = room < U(170);
+            _modSearchWidth = Mathf.Round(_modSearchWraps ? Mathf.Min(_rowWidth, U(320)) : Mathf.Min(room, U(280)));
+        }
+
+        private void DrawModSearch()
+        {
+            string typed = SearchBox(ModSearchControl, _modSearch, ModSearchHint, _skin.SidebarFilter, out bool cleared, W(_modSearchWidth));
+            if (typed != _modSearch)
+            {
+                SetModSearch(typed);
+            }
+            if (cleared)
+            {
+                GUI.FocusControl(ModSearchControl);
+            }
         }
 
         // ------------------------------------------------------------------ one mod
