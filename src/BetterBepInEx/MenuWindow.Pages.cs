@@ -34,15 +34,11 @@ namespace BetterBepInEx
         private static readonly GUIContent FavoriteLabel = new GUIContent("Favorite", "Listed under Favorites at the top of the mods list. Click to remove it.");
         private static readonly GUIContent AddFavoriteLabel = new GUIContent("Add to favorites", "List this mod under Favorites at the top of the mods list");
         private static readonly GUIContent HiddenFromListLabel = new GUIContent("Hidden from list", "You hid this mod from the mods list. Click to list it again.");
-        private static readonly GUIContent MoreLabel = new GUIContent("More  ▼", "Rename, hide from the list, copy and paste settings");
-        private static readonly GUIContent[] MoreItemsBase =
-        {
-            new GUIContent("Rename in the list"),
-            new GUIContent("Hide from the mods list"),
-            new GUIContent("Copy settings"),
-            new GUIContent("Paste settings"),
-        };
-        private static readonly GUIContent WebsiteItem = new GUIContent("Open website");
+        private static readonly GUIContent RenameLabel = new GUIContent("Rename", "Give this mod a different name in the list");
+        private static readonly GUIContent HideLabel = new GUIContent("Hide", "Hide this mod from the mods list");
+        private static readonly GUIContent WebsiteLabel = new GUIContent("Website", "Open this mod's website");
+        private static readonly GUIContent CopyLabel = new GUIContent("Copy", "Copy this mod's settings as text");
+        private static readonly GUIContent PasteLabel = new GUIContent("Paste", "Apply settings copied from this menu to this mod");
         private static readonly GUIContent PasteAllLabel = new GUIContent("Paste", "Apply settings copied from this menu, for every mod they cover");
 
         /// <summary>What a list was last built from. The same again means the same rows, so it is not built again.</summary>
@@ -222,26 +218,37 @@ namespace BetterBepInEx
         private void DrawPage(Page page)
         {
             // The title takes whatever width the buttons leave, and wraps in it. The buttons are
-            // the few used often; the rest are under More, so the row fits a narrow window.
+            // all ghost buttons of one height, so they line up.
             GUILayout.BeginHorizontal();
             GUILayout.BeginVertical();
             DrawPageTitle(page);
             GUILayout.EndVertical();
             GUILayout.Space(U(12));
 
-            if (page.UserHidden && GUILayout.Button(HiddenFromListLabel, _skin.GhostOn, NoExpand))
-            {
-                ToggleUserHidden(page);
-            }
             bool favorite = _favorites.Contains(page.Guid);
             if (GUILayout.Button(favorite ? FavoriteLabel : AddFavoriteLabel, favorite ? _skin.GhostOn : _skin.Ghost, NoExpand))
             {
                 ToggleFavorite(page);
             }
-            Rect more = GUILayoutUtility.GetRect(MoreLabel, _skin.Ghost, NoExpand);
-            if (GUI.Button(more, MoreLabel, _skin.Ghost))
+            if (_renaming != page && GUILayout.Button(RenameLabel, _skin.Ghost, NoExpand))
             {
-                OpenMoreMenu(page, more);
+                StartRename(page);
+            }
+            if (GUILayout.Button(page.UserHidden ? HiddenFromListLabel : HideLabel, page.UserHidden ? _skin.GhostOn : _skin.Ghost, NoExpand))
+            {
+                ToggleUserHidden(page);
+            }
+            if (page.Website != null && GUILayout.Button(WebsiteLabel, _skin.Ghost, NoExpand))
+            {
+                Application.OpenURL(page.Website);
+            }
+            if (GUILayout.Button(CopyLabel, _skin.Ghost, NoExpand))
+            {
+                CopyRows(page.Rows, page.DisplayName + " " + page.Version);
+            }
+            if (GUILayout.Button(PasteLabel, _skin.Ghost, NoExpand))
+            {
+                Paste(page);
             }
             GUI.enabled = page.ChangedCount > 0;
             if (Confirm(page, "Reset mod", "Reset ", page.ChangedCount, _skin.GhostDanger, NoExpand))
@@ -269,30 +276,6 @@ namespace BetterBepInEx
                 }
             }
             DrawList(page.Guid);
-        }
-
-        /// <summary>The page's less-used actions, in a menu under the More button.</summary>
-        private void OpenMoreMenu(Page page, Rect anchor)
-        {
-            List<GUIContent> labels = new List<GUIContent>(MoreItemsBase);
-            List<Action> actions = new List<Action>
-            {
-                () => StartRename(page),
-                () => ToggleUserHidden(page),
-                () => CopyRows(page.Rows, page.DisplayName + " " + page.Version),
-                () => Paste(page),
-            };
-            if (page.UserHidden)
-            {
-                labels[1] = Cached("Show in the mods list");
-            }
-            if (page.Website != null)
-            {
-                labels.Add(WebsiteItem);
-                string url = page.Website;
-                actions.Add(() => Application.OpenURL(url));
-            }
-            OpenPopup(null, anchor, labels.ToArray(), -1, i => actions[i]());
         }
 
         // ------------------------------------------------------------------ search
