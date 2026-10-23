@@ -61,7 +61,16 @@ For SPT 4.1.x.
   straight away.
 - Screenshots are also saved in `BepInEx\BetterBepInEx\Screenshots`.
 - Mods that only restyle the stock F12 window have nothing to restyle while this menu is on.
+- **Works alongside [Integrated Configuration Manager](https://sp-mod.com/mod/3095/integrated-configuration-manager).**
+  It puts your mod settings in a Plugins tab in EFT's own Settings menu, and this one handles F12.
+  Both change the same settings, so use whichever is handy.
 
 ## Uninstall
 
 Delete `BepInEx\plugins\BetterBepInEx.dll`. The stock F12 menu comes back.
+
+## Credits
+
+Shout-out to **Sage** and [Integrated Configuration Manager](https://sp-mod.com/mod/3095/integrated-configuration-manager):
+some of the ideas in this menu started there. If you'd rather change your settings from EFT's own
+Settings menu, give it a look.
