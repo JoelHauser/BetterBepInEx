@@ -5,7 +5,7 @@ A replacement for SPT's F12 mod settings menu. Same hotkey, same settings, a muc
 ## What you get
 
 - **Sidebar of mods** with favorites and a filter box.
-- **Search every setting** across all mods.
+- **Search every setting** across all mods, or just the mod you're on.
 - **See what you changed**: changed settings are marked and listed on one page. Reset one, a
   whole mod, or everything.
 - **Undo and redo** with Ctrl+Z / Ctrl+Y.

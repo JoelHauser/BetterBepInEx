@@ -41,6 +41,7 @@ namespace BetterBepInEx
             public object Of;
             public RowFilter Filter;
             public SearchQuery Query;
+            public SearchQuery RowQuery;
             public int Flags;
             public int Model;
             public int Stamp;
@@ -57,12 +58,12 @@ namespace BetterBepInEx
         private bool Stale(ref ListSource last, object of)
         {
             int flags = (ShowHidden ? 1 : 0) | (ShowAdvanced ? 2 : 0);
-            if (ReferenceEquals(last.Of, of) && last.Filter == _filter && ReferenceEquals(last.Query, _query) && last.Flags == flags
-                && last.Model == _model.Version && last.Stamp == _listStamp)
+            if (ReferenceEquals(last.Of, of) && last.Filter == _filter && ReferenceEquals(last.Query, _query) && ReferenceEquals(last.RowQuery, _rowQuery)
+                && last.Flags == flags && last.Model == _model.Version && last.Stamp == _listStamp)
             {
                 return false;
             }
-            last = new ListSource { Of = of, Filter = _filter, Query = _query, Flags = flags, Model = _model.Version, Stamp = _listStamp };
+            last = new ListSource { Of = of, Filter = _filter, Query = _query, RowQuery = _rowQuery, Flags = flags, Model = _model.Version, Stamp = _listStamp };
             return true;
         }
 
@@ -73,6 +74,22 @@ namespace BetterBepInEx
         private int _filterHiddenCount;
         private RowFilter _chipsFilter = RowFilter.All;
         private bool _chipsShowHidden;
+
+        private const string ModSearchControl = "bbeModSearch";
+        private static readonly GUIContent ModSearchHint = new GUIContent("Search this mod");
+
+        /// <summary>The search box on a mod's page: what is typed there, and the query made of it.</summary>
+        private string _modSearch = string.Empty;
+        private SearchQuery _modQuery = SearchQuery.Empty;
+
+        /// <summary>While a mod page is drawn and its search box has text: rows must match it to be listed or counted.</summary>
+        private SearchQuery _rowQuery;
+
+        private void SetModSearch(string text)
+        {
+            _modSearch = text ?? string.Empty;
+            _modQuery = new SearchQuery(_modSearch);
+        }
 
         private readonly HashSet<Row> _shownInConflicts = new HashSet<Row>();
         private readonly Dictionary<List<Row>, GUIContent> _conflictLabels = new Dictionary<List<Row>, GUIContent>();
@@ -134,6 +151,10 @@ namespace BetterBepInEx
             {
                 return false;
             }
+            if (_rowQuery != null && !_rowQuery.Matches(row.Haystack))
+            {
+                return false;
+            }
             switch (filter)
             {
                 case RowFilter.All:
@@ -149,7 +170,7 @@ namespace BetterBepInEx
         /// The chip bar: one chip per kind of setting present in <paramref name="rows"/>, with its
         /// count, and the advanced toggle on the right.
         /// </summary>
-        private void DrawFilterBar(List<Row> rows)
+        private void DrawFilterBar(List<Row> rows, bool modSearch = false)
         {
             // Counted on Layout only, and only when the rows may have changed: a search can list
             // thousands of them, and the chips drawn have to stay the same for the event that follows.
@@ -159,6 +180,10 @@ namespace BetterBepInEx
                 _filterHiddenCount = 0;
                 foreach (Row row in rows)
                 {
+                    if (_rowQuery != null && !_rowQuery.Matches(row.Haystack))
+                    {
+                        continue;
+                    }
                     // Advanced rows are always listed in search results, so only hidden ones count there.
                     if (row.IsHidden || row.IsAdvanced && _query.IsEmpty)
                     {
@@ -213,6 +238,19 @@ namespace BetterBepInEx
                     ToggleHidden();
                 }
             }
+            if (modSearch)
+            {
+                GUILayout.Space(U(6));
+                string typed = SearchBox(ModSearchControl, _modSearch, ModSearchHint, _skin.SidebarFilter, out bool cleared, W(U(240)));
+                if (typed != _modSearch)
+                {
+                    SetModSearch(typed);
+                }
+                if (cleared)
+                {
+                    GUI.FocusControl(ModSearchControl);
+                }
+            }
             GUILayout.EndHorizontal();
             GUILayout.Space(U(6));
         }
@@ -246,7 +284,21 @@ namespace BetterBepInEx
             GUI.enabled = true;
             GUILayout.EndHorizontal();
 
-            DrawFilterBar(page.Rows);
+            // The mod's own search narrows this page's rows, counts and chips, and nothing else.
+            _rowQuery = _modQuery.IsEmpty ? null : _modQuery;
+            try
+            {
+                DrawPageList(page);
+            }
+            finally
+            {
+                _rowQuery = null;
+            }
+        }
+
+        private void DrawPageList(Page page)
+        {
+            DrawFilterBar(page.Rows, true);
 
             if (BuildingList(page.Guid))
             {
@@ -259,6 +311,7 @@ namespace BetterBepInEx
                 if (listed == 0)
                 {
                     _listEmpty = page.Rows.Count == 0 ? "This mod has no settings to change. It is listed so you can see everything that is loaded."
+                        : _rowQuery != null ? "No setting in this mod matches the search."
                         : _filter != RowFilter.All ? "Nothing here matches the filter."
                         : "This mod's author hides all of its settings or marks them advanced. Turn on Show advanced, at the top of the menu, to see them.";
                 }
@@ -485,6 +538,7 @@ namespace BetterBepInEx
         private string _listKey;
         private RowFilter _listFilter;
         private SearchQuery _listQuery;
+        private SearchQuery _listRowQuery;
         private int _listWidth = -1;
         private int _listFlags = -1;
         private float _listViewHeight;
@@ -534,12 +588,13 @@ namespace BetterBepInEx
 
             _scroll.TryGetValue(key, out Vector2 pos);
             bool sameList = key == _listKey;
-            if (sameList && _filter != _listFilter || key == PageSearch && !ReferenceEquals(_query, _listQuery))
+            bool newRowQuery = !ReferenceEquals(_rowQuery, _listRowQuery);
+            if (sameList && (_filter != _listFilter || newRowQuery) || key == PageSearch && !ReferenceEquals(_query, _listQuery))
             {
-                // The same list filtered differently, or a new search: start from the top.
+                // The same list filtered or searched differently, or a new search: start from the top.
                 pos = Vector2.zero;
             }
-            if (!sameList || _filter != _listFilter || !ReferenceEquals(_query, _listQuery))
+            if (!sameList || _filter != _listFilter || newRowQuery || !ReferenceEquals(_query, _listQuery))
             {
                 _anchorRow = null;
                 _wheeling = false;
@@ -547,6 +602,7 @@ namespace BetterBepInEx
             _listKey = key;
             _listFilter = _filter;
             _listQuery = _query;
+            _listRowQuery = _rowQuery;
 
             // Positions are worked out again only when a block or a height changed. Otherwise they
             // are as they were, and so is the scroll position in them.

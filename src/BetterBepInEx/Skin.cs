@@ -409,7 +409,80 @@ namespace BetterBepInEx
             GuiSkin.toggle.onHover.textColor = Accent;
             GuiSkin.settings.selectionColor = new Color(Accent.r, Accent.g, Accent.b, 0.4f);
             GuiSkin.settings.cursorColor = Accent;
+
+            // Last, once every style has its font and padding: the corners of the short styles
+            // are fitted to the size they are drawn at.
+            foreach (GUIStyle s in new[] { Badge, BadgeDanger, BadgeMuted, Tag, Chip, ChipOn, GuiSkin.toggle, SearchField, SidebarFilter })
+            {
+                FitCorners(s, s.fixedHeight > 0f ? s.fixedHeight : s.CalcHeight(SampleText, 1000f), 0f);
+            }
+            FitCorners(TrackOn, U(24), 0f);
+            FitCorners(TrackOff, U(24), 0f);
+            FitCorners(SliderTrack, U(6), U(6));
+            FitCorners(SliderFill, U(6), U(6));
+            FitCorners(GuiSkin.horizontalSlider, U(6), 0f);
+            FitCorners(GuiSkin.verticalScrollbarThumb, float.MaxValue, U(6));
+            _refitted.Clear();
         }
+
+        private static readonly GUIContent SampleText = new GUIContent("0");
+
+        /// <summary>
+        /// Shrinks a style's corners when its nine-slice borders do not fit the height (or width)
+        /// it is drawn at. Unity then overlaps the top and bottom slices and paints the strip where
+        /// they meet twice: invisible while the menu is opaque, a line through every badge and chip
+        /// once it fades into the background. The corners become as round as the shape allows.
+        /// </summary>
+        private void FitCorners(GUIStyle s, float height, float width)
+        {
+            bool tooTall = s.border.vertical > height;
+            bool tooWide = width > 0f && s.border.horizontal > width;
+            if (!tooTall && !tooWide)
+            {
+                return;
+            }
+            int radius = Mathf.Max(1, Mathf.FloorToInt((width > 0f ? Mathf.Min(height, width) : height) / 2f) - 1);
+            s.border = new RectOffset(radius + 1, radius + 1, radius + 1, radius + 1);
+            s.normal.background = Refit(s.normal.background, radius);
+            s.hover.background = Refit(s.hover.background, radius);
+            s.active.background = Refit(s.active.background, radius);
+            s.focused.background = Refit(s.focused.background, radius);
+            s.onNormal.background = Refit(s.onNormal.background, radius);
+            s.onHover.background = Refit(s.onHover.background, radius);
+            s.onActive.background = Refit(s.onActive.background, radius);
+            s.onFocused.background = Refit(s.onFocused.background, radius);
+        }
+
+        /// <summary>The same rounded texture redrawn with a smaller radius; shared textures stay shared.</summary>
+        private Texture2D Refit(Texture2D t, int radius)
+        {
+            if (t == null || !_rounded.TryGetValue(t, out RoundedSpec spec))
+            {
+                return t;
+            }
+            if (spec.Radius == radius)
+            {
+                return t;
+            }
+            long key = ((long)t.GetInstanceID() << 16) | (uint)radius;
+            if (!_refitted.TryGetValue(key, out Texture2D fitted))
+            {
+                fitted = RoundedPx(spec.Fill, radius, spec.Outline);
+                _refitted[key] = fitted;
+            }
+            return fitted;
+        }
+
+        private struct RoundedSpec
+        {
+            public Color Fill;
+            public int Radius;
+            public Color? Outline;
+        }
+
+        /// <summary>What each rounded texture was drawn from, so <see cref="FitCorners"/> can redraw it.</summary>
+        private readonly Dictionary<Texture2D, RoundedSpec> _rounded = new Dictionary<Texture2D, RoundedSpec>();
+        private readonly Dictionary<long, Texture2D> _refitted = new Dictionary<long, Texture2D>();
 
         public void Destroy()
         {
@@ -421,6 +494,8 @@ namespace BetterBepInEx
                 }
             }
             _owned.Clear();
+            _rounded.Clear();
+            _refitted.Clear();
             GuiSkin = null;
         }
 
@@ -614,9 +689,11 @@ namespace BetterBepInEx
         /// A rounded rectangle with soft (coverage-sampled) edges, sized so nine-slicing with a
         /// border of radius + 1 keeps the corners intact at any size.
         /// </summary>
-        private Texture2D Rounded(Color fill, int radius, Color? outline)
+        private Texture2D Rounded(Color fill, int radius, Color? outline) => RoundedPx(fill, R(radius), outline);
+
+        /// <summary>A rounded rectangle with a radius in pixels, already scaled.</summary>
+        private Texture2D RoundedPx(Color fill, int radius, Color? outline)
         {
-            radius = R(radius);
             int size = radius * 2 + 4;
             Texture2D t = NewTexture(size, size);
             Color[] pixels = new Color[size * size];
@@ -638,6 +715,7 @@ namespace BetterBepInEx
             }
             t.SetPixels(pixels);
             t.Apply();
+            _rounded[t] = new RoundedSpec { Fill = fill, Radius = radius, Outline = outline };
             return t;
         }
 

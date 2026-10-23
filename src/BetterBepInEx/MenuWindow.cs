@@ -986,6 +986,7 @@ namespace BetterBepInEx
             if (_page != page)
             {
                 _filter = RowFilter.All;
+                SetModSearch(string.Empty);
             }
             _page = page;
             if (!page.StartsWith("@", StringComparison.Ordinal))
