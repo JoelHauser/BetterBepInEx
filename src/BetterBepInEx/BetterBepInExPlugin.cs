@@ -180,6 +180,7 @@ namespace BetterBepInEx
                 Logger.LogError("Could not patch the stock Configuration Manager, so the stock menu is left as it is: " + e);
                 return;
             }
+            InputBlocker.PatchEscape(_harmony, Logger);
 
             _host = gameObject.AddComponent<MenuHost>();
             _host.Menu = _menu;
@@ -303,6 +304,7 @@ namespace BetterBepInEx
                 _host.enabled = false;
                 _menu.OnClose();
                 _blocker.Release();
+                _blocker.ReleaseClicks();
             }
             _open = open;
 
@@ -317,6 +319,20 @@ namespace BetterBepInEx
             else
             {
                 _blocker.Release();
+            }
+            if (!_menu.Passive)
+            {
+                // Esc belongs to the menu while it is up; see InputBlocker.SwallowEscape.
+                InputBlocker.SwallowEscape(0.1f);
+            }
+            if (_menu.Passive && _menu.PointerOver)
+            {
+                // Faded, with the pointer on it: a click here is for the menu, not the trigger.
+                _blocker.HoldClicks();
+            }
+            else
+            {
+                _blocker.ReleaseClicks();
             }
             _menu.Update();
         }

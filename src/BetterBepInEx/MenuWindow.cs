@@ -206,6 +206,9 @@ namespace BetterBepInEx
         /// </summary>
         public bool Passive { get; private set; }
 
+        /// <summary>Whether the pointer was over the window at the last GUI event.</summary>
+        public bool PointerOver { get; private set; }
+
         /// <summary>The window's current opacity, eased towards its target so fading is not a jump.</summary>
         private float _alpha = 1f;
 
@@ -302,7 +305,16 @@ namespace BetterBepInEx
             }
 
             Event e = Event.current;
+            if (IsCapturing && e.isMouse && e.button != 0)
+            {
+                // A mouse button being bound (Mouse 2 to Mouse 7) is read from Input in Update.
+                // Let through, the press clicked whatever was under the cursor: GUI.Button answers
+                // every button, so over the listening field it toggled the capture off, and over
+                // the backdrop it faded the menu, which cancels it. Either way the old bind stayed.
+                e.Use();
+            }
             bool mouseOver = _rect.Contains(e.mousePosition);
+            PointerOver = mouseOver;
             if (Passive && e.type == EventType.MouseDown && mouseOver)
             {
                 // Clicking the faded menu brings it back. The click is not used up, so it also
@@ -495,6 +507,23 @@ namespace BetterBepInEx
             }
             bool ctrl = e.control || e.command;
             bool typing = GUIUtility.keyboardControl != 0;
+
+            if (e.keyCode == KeyCode.Escape)
+            {
+                // An open dropdown first, then the menu itself, as the X button does (a pending
+                // text edit is kept). Not while binding a key: there Esc cancels the capture.
+                if (_popup != null)
+                {
+                    ClosePopup();
+                }
+                else
+                {
+                    InputBlocker.SwallowEscape(0.5f);
+                    _stock.DisplayingWindow = false;
+                }
+                e.Use();
+                return;
+            }
 
             if ((e.keyCode == KeyCode.Return || e.keyCode == KeyCode.KeypadEnter) && _editingRow != null)
             {

@@ -16,7 +16,7 @@ A replacement for SPT's F12 mod settings menu. Same hotkey, same settings, a muc
 - **Show advanced** in the title bar for hidden and advanced settings.
 - **Make it yours**: five themes, eight fonts, your own accent color, a color for the category
   headings inside a mod, text size and compact rows.
-- **Holds you still in raid** while the menu is open.
+- **Holds you still in raid** while the menu is open, and Esc closes it.
 
 Mods with their own custom settings controls keep working.
 

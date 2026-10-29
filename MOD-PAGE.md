@@ -50,7 +50,7 @@ One click on a mod's page makes this, ready to paste:
 ## Install
 
 Unzip into your SPT folder, so `BetterBepInEx.dll` lands in `BepInEx\plugins`. Press F12 as
-usual. Client only, no server part.
+usual (Esc closes it too). Client only, no server part.
 
 For SPT 4.1.x.
 
