@@ -320,11 +320,8 @@ namespace BetterBepInEx
             {
                 _blocker.Release();
             }
-            if (!_menu.Passive)
-            {
-                // Esc belongs to the menu while it is up; see InputBlocker.SwallowEscape.
-                InputBlocker.SwallowEscape(0.1f);
-            }
+            // Esc belongs to the menu while it is up, faded or not; see InputBlocker.SwallowEscape.
+            InputBlocker.SwallowEscape(0.1f);
             if (_menu.Passive && _menu.PointerOver)
             {
                 // Faded, with the pointer on it: a click here is for the menu, not the trigger.

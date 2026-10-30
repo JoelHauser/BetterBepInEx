@@ -232,6 +232,8 @@ namespace BetterBepInEx
             _focusSearch = true;
             _focusWindow = true;
             _rectLoaded = false;
+            // Esc already held when the menu opens is not a press.
+            _escWasDown = EscapeKey.IsDown();
             if (_page != null && !_page.StartsWith("@", StringComparison.Ordinal) && !_model.PagesByGuid.ContainsKey(_page))
             {
                 _page = PageChanged;
@@ -510,17 +512,7 @@ namespace BetterBepInEx
 
             if (e.keyCode == KeyCode.Escape)
             {
-                // An open dropdown first, then the menu itself, as the X button does (a pending
-                // text edit is kept). Not while binding a key: there Esc cancels the capture.
-                if (_popup != null)
-                {
-                    ClosePopup();
-                }
-                else
-                {
-                    InputBlocker.SwallowEscape(0.5f);
-                    _stock.DisplayingWindow = false;
-                }
+                // Handled in Update (HandleEscape); used up here so a focused field ignores it.
                 e.Use();
                 return;
             }

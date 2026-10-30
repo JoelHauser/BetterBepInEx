@@ -39,6 +39,7 @@ namespace BetterBepInEx
         private Row _editingRow;
         private string _editBuffer;
 
+        private bool _escWasDown;
         private Row _capturing;
         private float _captureStarted;
         private bool _hotkeyOverrideBefore;
@@ -857,6 +858,31 @@ namespace BetterBepInEx
             GUIUtility.keyboardControl = 0;
         }
 
+        /// <summary>
+        /// Esc closes an open dropdown first, then the menu, as the X button does (a pending text
+        /// edit is kept), wherever the mouse is and whatever has focus. The press is tracked even
+        /// while a key is being bound, where Esc cancels the capture instead, so letting go of it
+        /// there does not also close the menu. Faded too: the game has the other keys then, but
+        /// not Esc (see InputBlocker.SwallowEscape).
+        /// </summary>
+        private void HandleEscape()
+        {
+            bool down = Application.isFocused && EscapeKey.IsDown();
+            bool pressed = down && !_escWasDown;
+            _escWasDown = down;
+            if (!pressed || IsCapturing || _stock.StockCapturingKey)
+            {
+                return;
+            }
+            if (_popup != null)
+            {
+                ClosePopup();
+                return;
+            }
+            InputBlocker.SwallowEscape(0.5f);
+            _stock.DisplayingWindow = false;
+        }
+
         private void CancelCapture()
         {
             if (_capturing == null)
@@ -877,6 +903,7 @@ namespace BetterBepInEx
         /// </summary>
         public void Update()
         {
+            HandleEscape();
             if (_slideRow != null && !Application.isFocused)
             {
                 // Alt-tabbed mid-drag: the release happens outside the game and no MouseUp ever
