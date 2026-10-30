@@ -18,7 +18,7 @@ namespace BetterBepInEx
     /// in-raid screen (inventory, map, menu) sets when it opens. While it is set, the owner's
     /// TranslateAxes and command handling return on their first line. InventoryWalker's notes have
     /// the IL reading. The flag is a private static bool, so its current value is read through the
-    /// one field the public setter stores to, and put back as it was when the menu closes.
+    /// one field the public setter stores to; see Hold for when it is taken and given back.
     ///
     /// Outside a raid the flag is read by nothing, so setting it there is harmless.
     /// </summary>
@@ -37,7 +37,6 @@ namespace BetterBepInEx
         private Action<bool> _set;
         private FieldInfo _flag;
         private bool _blocking;
-        private bool _previous;
 
         private IList _clickCommands;
         private MethodInfo _ignoredAdd;
@@ -172,8 +171,11 @@ namespace BetterBepInEx
         }
 
         /// <summary>
-        /// Called every frame while the menu is open. Re-asserts the flag, because a screen change
-        /// underneath (the raid ending, say) can clear it.
+        /// Called every frame while the menu is open. Takes the flag only when it is off, then
+        /// re-asserts it, because a screen change underneath (the raid ending, say) can clear it.
+        /// A flag someone else already holds is left alone, and not put back on close: the menu
+        /// can stay open across a raid load, and EFT clears a stale flag at raid start, so
+        /// restoring the value from when the menu opened froze the player for the whole raid.
         /// </summary>
         public void Hold()
         {
@@ -181,11 +183,11 @@ namespace BetterBepInEx
             {
                 return;
             }
-            if (!_blocking)
+            if (!_blocking && (bool)_flag.GetValue(null))
             {
-                _previous = (bool)_flag.GetValue(null);
-                _blocking = true;
+                return;
             }
+            _blocking = true;
             _set(true);
         }
 
@@ -196,7 +198,7 @@ namespace BetterBepInEx
                 return;
             }
             _blocking = false;
-            _set(_previous);
+            _set(false);
         }
 
         /// <summary>
