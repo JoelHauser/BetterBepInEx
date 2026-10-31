@@ -109,6 +109,9 @@ public class PrettyNameTests
     [InlineData("Amands's Graphics", "Amands's Graphics")]
     [InlineData("BarterItemsStacksClient", "BarterItemsStacksClient")]
     [InlineData("Some.dll", "Some.dll")]
+    [InlineData("Fika.Core", "Fika Core")]
+    [InlineData("SPT.Core", "SPT Core")]
+    [InlineData("Tylevo-TacticalServicesControl-Fika", "Tactical Services Control Fika")]
     public void CodeNamesBecomeReadable(string name, string expected)
     {
         Assert.Equal(expected, DisplayNames.Pretty(name, "com.x.y"));
@@ -119,6 +122,8 @@ public class PrettyNameTests
     [InlineData("Fontaine-SPTStanceOverhaul", "Fontaine")]
     [InlineData("AOSix", null)]
     [InlineData("acidphantasm-brightlasers", null)]
+    [InlineData("Fika.Core", null)]
+    [InlineData("Tylevo-TacticalServicesControl-Fika", "Tylevo")]
     public void TheDroppedPrefixIsTheAuthor(string name, string? expected)
     {
         Assert.Equal(expected, DisplayNames.AuthorFromName(name));

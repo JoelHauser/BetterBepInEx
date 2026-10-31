@@ -24,53 +24,90 @@ namespace BetterBepInEx.Core
         /// A readable name for mods that use a code name as their display name. "Tyfon.UIFixes"
         /// becomes "UI Fixes" and "Fontaine-SPTStanceOverhaul" becomes "SPT Stance Overhaul": the
         /// part after the last '.' (or the last '-', when that part has capitals), with spaces
-        /// put between its words. Names that already contain a space are left alone, as are
-        /// all-lowercase ones like "acidphantasm-brightlasers", where there is nothing to split on.
+        /// put between its words. When that part is only a generic word, the part before it is
+        /// kept too: "Fika.Core" is "Fika Core", not "Core", and an add-on named
+        /// "Tylevo-TacticalServicesControl-Fika" is not shown as "Fika". Names that already
+        /// contain a space are left alone, as are all-lowercase ones like
+        /// "acidphantasm-brightlasers", where there is nothing to split on.
         /// </summary>
         public static string Pretty(string name, string guid)
         {
             string clean = Clean(name, guid);
-            if (clean.IndexOf(' ') >= 0)
-            {
-                return clean;
-            }
-            string tail = null;
-            int dot = clean.LastIndexOf('.');
-            if (dot >= 0 && dot < clean.Length - 2)
-            {
-                tail = clean.Substring(dot + 1);
-            }
-            else
-            {
-                int dash = clean.LastIndexOf('-');
-                if (dash > 0 && dash < clean.Length - 2 && HasUpper(clean.Substring(dash + 1)))
-                {
-                    tail = clean.Substring(dash + 1);
-                }
-            }
-            if (tail == null || !HasUpper(tail))
-            {
-                return clean;
-            }
-            return SplitWords(tail);
+            return Split(clean, out _) ?? clean;
         }
 
         /// <summary>The "author" part that <see cref="Pretty"/> dropped, or null when it dropped nothing.</summary>
         public static string AuthorFromName(string name)
         {
             string clean = (name ?? string.Empty).TrimStart('!').Trim();
-            if (clean.Length == 0 || clean.IndexOf(' ') >= 0)
+            if (clean.Length == 0 || Split(clean, out string author) == null)
             {
                 return null;
             }
-            string pretty = Pretty(clean, null);
-            if (pretty == clean)
-            {
-                return null;
-            }
-            int cut = clean.LastIndexOf('.') >= 0 && clean.LastIndexOf('.') < clean.Length - 2 ? clean.LastIndexOf('.') : clean.LastIndexOf('-');
-            string author = cut > 0 ? clean.Substring(0, cut) : null;
             return string.IsNullOrEmpty(author) ? null : author;
+        }
+
+        /// <summary>
+        /// Words that say what kind of DLL a plugin is rather than what it is, so they make no
+        /// name on their own.
+        /// </summary>
+        private static readonly string[] GenericTails =
+        {
+            "Core", "Client", "Server", "Plugin", "Main", "Mod", "Common", "Base", "Net", "Interop", "Patches", "Fika"
+        };
+
+        /// <summary>
+        /// The shown name of a code name, with what comes before it in <paramref name="author"/>,
+        /// or null when the name is not a code name.
+        /// </summary>
+        private static string Split(string clean, out string author)
+        {
+            author = null;
+            if (clean.IndexOf(' ') >= 0)
+            {
+                return null;
+            }
+            int cut = LastCut(clean);
+            if (cut < 0)
+            {
+                return null;
+            }
+            string tail = clean.Substring(cut + 1);
+            if (!HasUpper(tail))
+            {
+                return null;
+            }
+            if (Array.IndexOf(GenericTails, tail) < 0)
+            {
+                author = clean.Substring(0, cut);
+                return SplitWords(tail);
+            }
+
+            string head = clean.Substring(0, cut);
+            int before = Math.Max(head.LastIndexOf('.'), head.LastIndexOf('-'));
+            string word = before >= 0 ? head.Substring(before + 1) : head;
+            if (word.Length == 0)
+            {
+                return null;
+            }
+            author = before > 0 ? head.Substring(0, before) : null;
+            return SplitWords(word) + " " + tail;
+        }
+
+        /// <summary>Where the code name splits: the last '.', else the last '-' before a part with capitals.</summary>
+        private static int LastCut(string clean)
+        {
+            int dot = clean.LastIndexOf('.');
+            if (dot >= 0 && dot < clean.Length - 2)
+            {
+                return dot;
+            }
+            int dash = clean.LastIndexOf('-');
+            if (dash > 0 && dash < clean.Length - 2 && HasUpper(clean.Substring(dash + 1)))
+            {
+                return dash;
+            }
+            return -1;
         }
 
         /// <summary>"WeaponCamoAndStickers" to "Weapon Camo And Stickers", "UIFixes" to "UI Fixes", "GTFO" stays.</summary>
