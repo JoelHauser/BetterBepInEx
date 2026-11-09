@@ -309,7 +309,7 @@ namespace BetterBepInEx
             Event e = Event.current;
             if (IsCapturing && e.isMouse && e.button != 0)
             {
-                // A mouse button being bound (Mouse 2 to Mouse 7) is read from Input in Update.
+                // A mouse button being bound (Mouse2, the middle button, to Mouse6) is read from Input in Update.
                 // Let through, the press clicked whatever was under the cursor: GUI.Button answers
                 // every button, so over the listening field it toggled the capture off, and over
                 // the backdrop it faded the menu, which cancels it. Either way the old bind stayed.
@@ -1406,7 +1406,10 @@ namespace BetterBepInEx
             }
             if (key >= KeyCode.Mouse3 && key <= KeyCode.Mouse6)
             {
-                return "Mouse " + (int)(key - KeyCode.Mouse0 + 1);
+                // Unity's own number, as the .cfg file, the stock menu and mods' descriptions all
+                // write it. Counting from 1 instead showed Mouse3 as "Mouse 4", so a side button
+                // looked bound to the wrong one.
+                return "Mouse " + (int)(key - KeyCode.Mouse0);
             }
             return DisplayNames.SplitWords(key.ToString());
         }
