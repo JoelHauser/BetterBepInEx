@@ -30,7 +30,7 @@ namespace BetterBepInEx
         public const string PluginName = "BetterBepInEx";
 
         /// <summary>Must match the csproj's Version. Two places, and they have to agree.</summary>
-        public const string PluginVersion = "1.0.3";
+        public const string PluginVersion = "1.0.4";
 
         private const string GameFontHint = "Bender";
 
@@ -98,8 +98,12 @@ namespace BetterBepInEx
                 "Darken the screen behind the menu.");
             ShowDescriptions = Config.Bind("General", "Show descriptions under settings", true,
                 "Print each setting's description under its name. Off shows it when you hover the name instead.");
+            // The title bar's Show advanced button is this setting's only control; the model leaves
+            // it off the menu's own page (see SettingsModel.Unlisted). The key keeps its old name so
+            // saved choices carry over.
             ShowHidden = Config.Bind("General", "Show hidden and advanced", false,
-                "Show settings their mod marks as advanced. Search always finds them.");
+                "Show settings and mods that their authors hide or mark as advanced. Set by the Show advanced "
+                + "button in the menu's title bar. Search always finds advanced settings.");
 
             Theme = Config.Bind("Look", "Theme", MenuTheme.Dark,
                 "The menu's colours. Black suits OLED screens; High contrast is easiest to read.");
@@ -150,7 +154,8 @@ namespace BetterBepInEx
                 }
             };
 
-            // Kept between sessions; the "Hidden" tag keeps them off the menu's own page.
+            // Kept between sessions; the model leaves them unlisted (see below), and the "Hidden" tag
+            // keeps them out of the stock menu too.
             WindowRect = Config.Bind("Window", "Position", string.Empty, new ConfigDescription("Window position and size, as fractions of the screen.", null, "Hidden"));
             Favorites = Config.Bind("Window", "Favorites", string.Empty, new ConfigDescription("GUIDs of favourite mods.", null, "Hidden"));
             LastPage = Config.Bind("Window", "Last page", string.Empty, new ConfigDescription("The page open when the menu closed.", null, "Hidden"));
@@ -164,6 +169,9 @@ namespace BetterBepInEx
             _blocker.Resolve(Logger);
 
             _model = new SettingsModel(_stock);
+            // The menu's own state: set by its title bar and window, never listed (not even with
+            // Show advanced), since their raw values mean nothing to a player.
+            _model.Unlisted.UnionWith(new ConfigEntryBase[] { ShowHidden, WindowRect, Favorites, LastPage, RecentMods });
             _menu = new MenuWindow(this, _stock, _model);
 
             _harmony = new Harmony(PluginGuid);

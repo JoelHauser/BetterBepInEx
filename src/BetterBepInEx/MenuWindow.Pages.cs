@@ -17,7 +17,12 @@ namespace BetterBepInEx
         private static readonly RowFilter[] Filters = { RowFilter.All, RowFilter.Changed };
 
         private static readonly GUIContent HiddenTag = new GUIContent("HIDDEN",
-            "Its mod hides this setting from the menu. Change it only if you know what it does.");
+            "The mod's author keeps this setting off the menu, often to work around a conflict or another "
+            + "problem. Change it only if the author tells you to.");
+
+        private static readonly GUIContent HiddenNote = new GUIContent(
+            "The author keeps these off the menu, often to fix a conflict or another problem. "
+            + "They show here because Show advanced is on. Change one only if the author tells you to.");
 
         private static readonly string[] FilterNames = { "All  ", "Changed  " };
 
@@ -355,7 +360,15 @@ namespace BetterBepInEx
                 bool sectionNames = page.Sections.Count > 1 || page.Sections.Count == 1 && page.Sections[0].Name.Length > 0;
                 foreach (Section section in page.Sections)
                 {
-                    listed += AddGroup(section, sectionNames && section.Name.Length > 0 ? section.Label : null, _skin.SectionHeader, null, section.Rows, false);
+                    if (section.IsHiddenGroup)
+                    {
+                        listed += AddGroup(section, section.Label, _skin.HiddenHeader, null, section.Rows, false,
+                            note: HiddenNote, noteKey: section.NoteKey);
+                    }
+                    else
+                    {
+                        listed += AddGroup(section, sectionNames && section.Name.Length > 0 ? section.Label : null, _skin.SectionHeader, null, section.Rows, false);
+                    }
                 }
                 if (listed == 0)
                 {
@@ -514,7 +527,7 @@ namespace BetterBepInEx
         /// nothing. Returns the number of rows added.
         /// </summary>
         private int AddGroup(object key, GUIContent header, GUIStyle headerStyle, Page link, List<Row> rows, bool showPageName,
-            int start = 0, int end = -1, HashSet<Row> skip = null)
+            int start = 0, int end = -1, HashSet<Row> skip = null, GUIContent note = null, object noteKey = null)
         {
             if (end < 0)
             {
@@ -531,6 +544,10 @@ namespace BetterBepInEx
                 if (count == 0)
                 {
                     _blocks.Add(new Block { Key = header == null ? null : key, Header = header, Style = headerStyle, Link = link });
+                    if (note != null)
+                    {
+                        _blocks.Add(new Block { Key = noteKey, Header = note, Style = _skin.HiddenNote });
+                    }
                 }
                 _blocks.Add(new Block { Key = row, Row = row, PageName = showPageName, First = count == 0 });
                 count++;
@@ -972,7 +989,7 @@ namespace BetterBepInEx
                 GUILayout.Label(row.Page.Title, _skin.Small);
             }
             GUILayout.BeginHorizontal();
-            GUILayout.Label(_plugin.ShowDescriptions.Value ? row.NamePlain : row.Name, _skin.Label);
+            GUILayout.Label(_plugin.ShowDescriptions.Value ? row.NamePlain : row.Name, row.IsHidden ? _skin.LabelHidden : _skin.Label);
             // While its slider is held, the row keeps the Reset link it had when the drag began:
             // one appearing mid-drag would move the slider under the mouse.
             bool showReset = _slideRow == row ? _slideShowReset : row.IsChanged && row.CanReset;
@@ -1052,7 +1069,7 @@ namespace BetterBepInEx
                 GUILayout.BeginHorizontal();
                 if (row.IsHidden)
                 {
-                    GUILayout.Label(HiddenTag, _skin.Tag, NoExpand);
+                    GUILayout.Label(HiddenTag, _skin.TagHidden, NoExpand);
                 }
                 if (advanced)
                 {

@@ -104,8 +104,8 @@ namespace BetterBepInEx
         public GUISkin GuiSkin { get; private set; }
 
         public GUIStyle Window, Sidebar, Card, TitleBar;
-        public GUIStyle Title, PageTitle, PageSubtitle, SectionHeader, GroupHeader, GroupHeaderDanger;
-        public GUIStyle Label, Muted, Small, Description, DangerText, Badge, BadgeDanger, BadgeMuted, Tag;
+        public GUIStyle Title, PageTitle, PageSubtitle, SectionHeader, GroupHeader, GroupHeaderDanger, HiddenHeader, HiddenNote;
+        public GUIStyle Label, LabelHidden, Muted, Small, Description, DangerText, Badge, BadgeDanger, BadgeMuted, Tag, TagHidden;
         public GUIStyle SidebarItem, SidebarText, SidebarTextActive, SidebarTextHidden, SidebarTextOwn, SidebarHeader, SidebarSelected, SidebarToggle, SidebarFilter, SidebarHiddenToggle;
         public GUIStyle CardTop, CardMid, CardBottom, CardSingle, RowHover, ShadowStyle, KeyHint, KeyHintActive;
         public GUIStyle Button, ButtonAccent, ButtonDanger, Ghost, GhostOn, GhostDanger, IconButton, LinkButton, Dropdown, HeaderToggle, ClearGlyph;
@@ -196,8 +196,18 @@ namespace BetterBepInEx
             GroupHeader.hover.textColor = Color.white;
             GroupHeaderDanger = new GUIStyle(GroupHeader);
             GroupHeaderDanger.normal.textColor = Danger;
+            // The section of settings a mod hides: a warning heading and a note under it, both
+            // padded rather than margined like the other headings.
+            HiddenHeader = new GUIStyle(SectionHeader);
+            HiddenHeader.normal.textColor = Danger;
+            HiddenNote = TextStyle(12, MutedColor);
+            HiddenNote.wordWrap = true;
+            HiddenNote.margin = Offset(0);
+            HiddenNote.padding = Offset(U(6), U(6), 0, U(8));
             Label = TextStyle(14, TextColor);
             Label.wordWrap = true;
+            LabelHidden = new GUIStyle(Label);
+            LabelHidden.normal.textColor = MutedColor;
             Muted = TextStyle(13, MutedColor);
             Muted.wordWrap = true;
             Small = TextStyle(12, MutedColor);
@@ -221,6 +231,9 @@ namespace BetterBepInEx
             Tag = Make(TextStyle(10, MutedColor, FontStyle.Bold), Rounded(TagBg, 6, null), 6);
             Tag.padding = Offset(U(6), U(6), U(1), U(2));
             Tag.margin = Offset(U(2), U(4), U(2), U(2));
+            TagHidden = new GUIStyle(Tag);
+            TagHidden.normal.background = Rounded(DangerBg, 6, null);
+            TagHidden.normal.textColor = Danger;
 
             // ---------------------------------------------------------------- sidebar
             SidebarItem = Make(null, null, 6);
@@ -463,7 +476,7 @@ namespace BetterBepInEx
 
             // Last, once every style has its font and padding: the corners of the short styles
             // are fitted to the size they are drawn at.
-            foreach (GUIStyle s in new[] { Badge, BadgeDanger, BadgeMuted, Tag, Chip, ChipOn, FilterChip, FilterChipOn, GuiSkin.toggle, SearchField, SidebarFilter })
+            foreach (GUIStyle s in new[] { Badge, BadgeDanger, BadgeMuted, Tag, TagHidden, Chip, ChipOn, FilterChip, FilterChipOn, GuiSkin.toggle, SearchField, SidebarFilter })
             {
                 FitCorners(s, s.fixedHeight > 0f ? s.fixedHeight : s.CalcHeight(SampleText, 1000f), 0f);
             }

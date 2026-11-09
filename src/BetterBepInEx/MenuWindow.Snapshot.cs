@@ -451,7 +451,7 @@ namespace BetterBepInEx
                 }
                 if (sectionNames && section.Name.Length > 0)
                 {
-                    AddSnapText(s, ref y, section.Label, _skin.SectionHeader, inner);
+                    AddSnapText(s, ref y, section.Label, section.IsHiddenGroup ? _skin.HiddenHeader : _skin.SectionHeader, inner);
                 }
                 else
                 {

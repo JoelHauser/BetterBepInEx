@@ -142,6 +142,15 @@ namespace BetterBepInEx
         public string Name;
         public GUIContent Label;
         public readonly List<Row> Rows = new List<Row>();
+
+        /// <summary>
+        /// The section at the end of a page that holds every setting its mod hides, whatever
+        /// section the mod put it in, so a hidden setting never sits among the ones meant to be changed.
+        /// </summary>
+        public bool IsHiddenGroup;
+
+        /// <summary>What the note under a hidden group's heading keeps its measured height under.</summary>
+        public readonly object NoteKey = new object();
     }
 
     internal sealed class Page
@@ -199,6 +208,14 @@ namespace BetterBepInEx
 
         private readonly Dictionary<ConfigEntryBase, Row> _rowsByEntry = new Dictionary<ConfigEntryBase, Row>();
         private readonly HashSet<ConfigFile> _watched = new HashSet<ConfigFile>();
+
+        /// <summary>
+        /// Entries saved in a config file but never listed anywhere, not even with Show advanced:
+        /// the menu has its own control for them.
+        /// </summary>
+        public readonly HashSet<ConfigEntryBase> Unlisted = new HashSet<ConfigEntryBase>();
+
+        public const string HiddenSectionName = "HIDDEN BY THE MOD'S AUTHOR";
         private readonly StockManager _stock;
         private bool _countsDirty = true;
         private bool _keybindsDirty = true;
@@ -236,7 +253,7 @@ namespace BetterBepInEx
             HashSet<SettingEntryBase> extras = new HashSet<SettingEntryBase>(extra);
             foreach (SettingEntryBase setting in settings.Concat(extras))
             {
-                if (setting == null || setting.PluginInfo == null)
+                if (setting == null || setting.PluginInfo == null || Unlisted.Contains(_stock.EntryOf(setting)))
                 {
                     continue;
                 }
@@ -263,16 +280,29 @@ namespace BetterBepInEx
             foreach (Page page in Pages)
             {
                 // Sections keep the order the mod bound them in, as the stock menu does; settings
-                // within a section follow the mod's Order, then their name.
-                List<string> sectionOrder = page.Rows.Select(r => r.Section).Distinct().ToList();
+                // within a section follow the mod's Order, then their name. Hidden settings leave
+                // their section for one of their own at the end (see Section.IsHiddenGroup).
+                List<string> sectionOrder = page.Rows.Where(r => !r.IsHidden).Select(r => r.Section).Distinct().ToList();
                 foreach (string name in sectionOrder)
                 {
                     Section section = new Section { Name = name, Label = new GUIContent(name.ToUpperInvariant()) };
                     section.Rows.AddRange(page.Rows
-                        .Where(r => r.Section == name)
+                        .Where(r => !r.IsHidden && r.Section == name)
                         .OrderByDescending(r => r.Setting.Order)
                         .ThenBy(r => r.Name.text, StringComparer.OrdinalIgnoreCase));
                     page.Sections.Add(section);
+                }
+                if (page.Rows.Any(r => r.IsHidden))
+                {
+                    Section hidden = new Section { Name = HiddenSectionName, Label = new GUIContent(HiddenSectionName), IsHiddenGroup = true };
+                    // Still in the mod's section order, the way the sections above are.
+                    foreach (IGrouping<string, Row> group in page.Rows.Where(r => r.IsHidden).GroupBy(r => r.Section))
+                    {
+                        hidden.Rows.AddRange(group
+                            .OrderByDescending(r => r.Setting.Order)
+                            .ThenBy(r => r.Name.text, StringComparer.OrdinalIgnoreCase));
+                    }
+                    page.Sections.Add(hidden);
                 }
                 page.Rows.Clear();
                 foreach (Section section in page.Sections)

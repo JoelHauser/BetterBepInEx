@@ -56,7 +56,9 @@ $built = Join-Path $root 'src\BetterBepInEx\bin\Release\BetterBepInEx.dll'
 $cecil = Join-Path $SPTPath 'SPT_Runtime\Mono.Cecil.dll'
 
 if (Test-Path $cecil) {
-    Add-Type -Path $cecil
+    # Loaded from its bytes: Add-Type -Path refuses a DLL Windows marks as downloaded, as the
+    # SPT installer's copy can be.
+    [void][System.Reflection.Assembly]::Load([System.IO.File]::ReadAllBytes($cecil))
     $module = [Mono.Cecil.ModuleDefinition]::ReadModule($built)
     $refs = $module.AssemblyReferences | ForEach-Object { $_.Name }
     $module.Dispose()
