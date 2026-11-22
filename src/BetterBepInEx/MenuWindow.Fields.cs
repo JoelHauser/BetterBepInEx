@@ -71,7 +71,11 @@ namespace BetterBepInEx
                     break;
                 case RowKind.Text:
                 case RowKind.Converted:
-                    DrawEditField(row, _skin.TextField, Expand);
+                    // Pinned to the column, not Expand: GUILayout takes a text field's minimum width
+                    // from its whole content, so a long value (a comma-separated list) pushed the
+                    // row wider than the page, squeezed the name to a letter a line, and shoved
+                    // everything right of it out of reach. The field clips and scrolls to the cursor.
+                    DrawEditField(row, _skin.TextField, W(_valueWidth));
                     break;
                 case RowKind.Enum:
                 case RowKind.List:
@@ -571,7 +575,9 @@ namespace BetterBepInEx
             int index = IndexOf(row.Options, value);
             GUIContent label = index >= 0 ? row.OptionLabels[index] : Cached(SettingsModel.OptionText(value));
 
-            Rect r = GUILayoutUtility.GetRect(label, _skin.Dropdown, Expand);
+            // Fixed width for the same reason as the text field: sizing by the label lets one long
+            // option push the row off the page.
+            Rect r = GUILayoutUtility.GetRect(label, _skin.Dropdown, W(_valueWidth));
             bool open = _popup != null && _popup.Row == row;
             if (GUI.Button(r, label, _skin.Dropdown))
             {
